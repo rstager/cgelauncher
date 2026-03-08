@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod auto_stop;
 pub mod disk;
 pub mod executor;
 pub mod instance;

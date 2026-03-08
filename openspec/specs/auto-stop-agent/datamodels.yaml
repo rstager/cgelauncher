@@ -1,0 +1,37 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: Auto-Stop Agent Data Models
+description: |
+  These models describe the on-VM configuration and state files used by the
+  auto-stop agent. They are not Rust/TypeScript types — they document the
+  file formats the shell script reads and writes.
+type: object
+properties:
+
+  AutoStopConfig:
+    type: object
+    description: |
+      Shell-sourceable config file at /etc/default/auto-stop.
+      Values are shell variable assignments (KEY=VALUE).
+    properties:
+      AUTO_STOP_TIMEOUT:
+        type: integer
+        default: 1800
+        description: Idle timeout in seconds before shutdown is triggered
+      AUTO_STOP_CHECK_INTERVAL:
+        type: integer
+        default: 300
+        description: How often the timer fires the check script, in seconds
+      AUTO_STOP_GRACE:
+        type: integer
+        default: 1
+        description: Minutes of grace period before shutdown (passed to shutdown +N)
+
+  LastActiveState:
+    type: object
+    description: |
+      Runtime state file at /var/run/auto-stop-agent/last-active.
+      Contains a single line: the epoch timestamp of the last observed SSH session.
+    properties:
+      epoch:
+        type: integer
+        description: Unix epoch seconds when an SSH session was last detected

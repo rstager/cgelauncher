@@ -1,3 +1,4 @@
+use crate::gcloud::auto_stop;
 use crate::gcloud::executor::{GcloudError, GcloudRunner};
 use crate::models::instance::VmStatus;
 use crate::models::machine::{has_builtin_gpu, MachineConfig};
@@ -54,6 +55,11 @@ pub fn build_create_instance_args(
     if config.spot {
         args.push("--provisioning-model=SPOT".into());
     }
+
+    args.push(format!(
+        "--metadata=startup-script={}",
+        auto_stop::STARTUP_SCRIPT
+    ));
 
     args.push("--quiet".into());
     args
@@ -335,5 +341,50 @@ mod tests {
     #[test]
     fn memory_for_unknown() {
         assert_eq!(memory_from_machine_type("e2-medium"), None);
+    }
+
+    #[test]
+    fn create_args_include_startup_script_metadata() {
+        let config = MachineConfig {
+            machine_type: "n1-standard-4".into(),
+            gpu_type: None,
+            gpu_count: None,
+            spot: false,
+        };
+
+        let args = build_create_instance_args("us-central1-a", "test-disk", &config);
+        let metadata_arg = args
+            .iter()
+            .find(|a| a.starts_with("--metadata=startup-script="));
+        assert!(
+            metadata_arg.is_some(),
+            "gcloud create args must include --metadata=startup-script="
+        );
+        let script = metadata_arg.unwrap();
+        assert!(
+            script.contains("auto-stop-check.sh"),
+            "startup script must install auto-stop-check.sh"
+        );
+        assert!(
+            script.contains("auto-stop.timer"),
+            "startup script must install auto-stop.timer"
+        );
+    }
+
+    #[test]
+    fn auto_stop_startup_script_is_valid() {
+        let script = auto_stop::STARTUP_SCRIPT;
+        assert!(
+            script.starts_with("#!/bin/sh"),
+            "startup script must have a shebang"
+        );
+        assert!(
+            script.contains("systemctl enable auto-stop.timer"),
+            "startup script must enable the timer"
+        );
+        assert!(
+            script.contains("AUTO_STOP_TIMEOUT=1800"),
+            "startup script must set default timeout"
+        );
     }
 }

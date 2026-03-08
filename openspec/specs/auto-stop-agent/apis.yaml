@@ -1,0 +1,27 @@
+title: Auto-Stop Agent API Changes
+description: |
+  No new Tauri commands are introduced. The only change is to the existing
+  VM creation flow: the gcloud command gains a --metadata flag to inject
+  the auto-stop startup script.
+
+changes:
+
+  startVm:
+    description: |
+      The gcloud compute instances create command adds:
+        --metadata startup-script="<auto-stop-startup.sh content>"
+      This is appended unconditionally when auto-stop is enabled (default: always).
+    affected_file: src-tauri/src/gcloud/instance.rs
+    gcloud_args_added:
+      - "--metadata"
+      - "startup-script=<embedded script content>"
+
+  # Future enhancement: Tauri command to configure auto-stop settings
+  # configureAutoStop:
+  #   operationId: configureAutoStop
+  #   summary: Configure auto-stop timeout for new VMs
+  #   requestBody:
+  #     properties:
+  #       timeoutMinutes:
+  #         type: integer
+  #         default: 30
