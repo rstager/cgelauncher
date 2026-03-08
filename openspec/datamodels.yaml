@@ -1,0 +1,171 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: CGE Launcher Data Models
+type: object
+properties:
+
+  Disk:
+    type: object
+    properties:
+      name:
+        type: string
+        description: Disk name
+      sizeGb:
+        type: integer
+        description: Disk size in GB
+      status:
+        type: string
+        enum: [READY, CREATING, RESTORING, FAILED, DELETING]
+        description: Current disk status
+      type:
+        type: string
+        enum: [pd-standard, pd-ssd, pd-balanced]
+        description: Disk type
+      attachedTo:
+        type: [string, "null"]
+        description: Instance name if attached, null if not
+    required: [name, sizeGb, status, type]
+
+  VmStatus:
+    type: string
+    enum: [Running, Starting, Stopping, Stopped, NotFound]
+
+  MachineConfig:
+    type: object
+    properties:
+      machineType:
+        type: string
+        description: "e.g., n1-standard-8"
+      gpuType:
+        type: [string, "null"]
+        description: "e.g., nvidia-tesla-t4, null for no GPU"
+      gpuCount:
+        type: [integer, "null"]
+        minimum: 1
+        description: Number of GPUs
+      spot:
+        type: boolean
+        description: true for spot, false for on-demand
+    required: [machineType, spot]
+
+  PricingEstimate:
+    type: object
+    properties:
+      spotHourly:
+        type: number
+        description: Spot price per hour in USD
+      ondemandHourly:
+        type: number
+        description: On-demand price per hour in USD
+      currency:
+        type: string
+        default: "USD"
+        description: Currency code
+      breakdown:
+        type: array
+        items:
+          $ref: "#/properties/PricingLineItem"
+        description: Itemized cost breakdown
+    required: [spotHourly, ondemandHourly, currency, breakdown]
+
+  PricingLineItem:
+    type: object
+    properties:
+      label:
+        type: string
+        description: "e.g., 4x vCPU, 30 GB Memory, 1x NVIDIA T4"
+      spotCost:
+        type: number
+        description: Spot cost for this component
+      ondemandCost:
+        type: number
+        description: On-demand cost for this component
+    required: [label, spotCost, ondemandCost]
+
+  ConfigPreset:
+    type: object
+    properties:
+      name:
+        type: string
+        description: "e.g., ML Training"
+      machineType:
+        type: string
+        description: Machine type identifier
+      gpuType:
+        type: [string, "null"]
+        description: GPU type or null for no GPU
+      gpuCount:
+        type: [integer, "null"]
+        description: Number of GPUs or null
+      description:
+        type: string
+        description: "e.g., 8 vCPU / 30GB / 4x T4"
+    required: [name, machineType, description]
+
+  UserPreferences:
+    type: object
+    properties:
+      project:
+        type: string
+        description: GCP project ID
+      zone:
+        type: string
+        description: GCP zone
+      defaultMachineType:
+        type: [string, "null"]
+        description: Default machine type
+      defaultGpuType:
+        type: [string, "null"]
+        description: Default GPU type
+      defaultGpuCount:
+        type: [integer, "null"]
+        description: Default GPU count
+      defaultSpot:
+        type: boolean
+        default: true
+        description: Whether to default to spot instances
+      serviceAccountKeyPath:
+        type: [string, "null"]
+        description: Path to service account JSON key file
+    required: [project, zone]
+
+  AuthStatus:
+    type: object
+    properties:
+      authenticated:
+        type: boolean
+        description: Whether the user is authenticated
+      method:
+        type: string
+        enum: [gcloud, service-account]
+        description: Authentication method
+      account:
+        type: [string, "null"]
+        description: Email or service account ID
+    required: [authenticated, method]
+
+  VmStatusUpdate:
+    type: object
+    description: Event payload for VM status changes
+    properties:
+      diskName:
+        type: string
+        description: Disk name
+      instanceName:
+        type: string
+        description: Instance name
+      status:
+        $ref: "#/properties/VmStatus"
+        description: Current VM status
+      machineType:
+        type: [string, "null"]
+        description: Machine type if known
+      gpuType:
+        type: [string, "null"]
+        description: GPU type if applicable
+      gpuCount:
+        type: [integer, "null"]
+        description: GPU count if applicable
+      memoryGb:
+        type: [number, "null"]
+        description: Memory in GB if known
+    required: [diskName, instanceName, status]

@@ -1,0 +1,52 @@
+openapi: 3.0.3
+info:
+  title: Change API Contract
+  version: 0.1.0
+  description: |
+    Replace with API contract details for this change.
+    Keep this document OpenAPI compatible.
+servers: []
+paths:
+  # Preferred pattern: reusable schema via $ref
+  /example:
+    get:
+      summary: Example operation
+      operationId: getExample
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExampleResponse'
+
+  # Allowed exception: inline schema for one-off payloads that are not reused
+  /health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  status:
+                    type: string
+                    enum:
+                      - ok
+                required:
+                  - status
+components:
+  schemas:
+    ExampleResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        message:
+          type: string
+      required:
+        - message

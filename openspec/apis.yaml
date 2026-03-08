@@ -1,0 +1,442 @@
+openapi: "3.0.3"
+
+info:
+  title: CGE Launcher Tauri Command Contracts
+  version: "0.1.0"
+  description: |
+    Formal API contracts for the CGE Launcher Tauri IPC commands.
+
+    These operations are modeled as HTTP-style endpoints for specification
+    purposes, but are invoked as Tauri commands over the IPC bridge.
+
+    ## Tauri Events
+
+    **vm-status-update**
+    Emitted by the backend whenever a VM status change occurs.
+    Payload schema: VmStatusUpdate (see components.schemas.VmStatusUpdate).
+    The frontend subscribes via `listen('vm-status-update', handler)`.
+
+paths:
+  /disks/list:
+    post:
+      operationId: listDisks
+      summary: List persistent disks in configured project/zone
+      responses:
+        "200":
+          description: Array of disks in the configured project and zone
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Disk"
+        "500":
+          description: gcloud CLI error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GcloudError"
+
+  /vm/start:
+    post:
+      operationId: startVm
+      summary: Create a VM from a persistent disk
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartVmRequest"
+      responses:
+        "200":
+          description: VM creation initiated; initial status update
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VmStatusUpdate"
+        "400":
+          description: Invalid machine/GPU combination
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "500":
+          description: gcloud CLI error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GcloudError"
+
+  /vm/stop:
+    post:
+      operationId: stopVm
+      summary: Delete a VM while preserving its disk
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StopVmRequest"
+      responses:
+        "200":
+          description: VM deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required:
+                  - success
+        "500":
+          description: gcloud CLI error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GcloudError"
+
+  /pricing/estimate:
+    post:
+      operationId: estimatePricing
+      summary: Estimate spot and on-demand costs for a machine config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MachineConfig"
+      responses:
+        "200":
+          description: Pricing estimate with itemized breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricingEstimate"
+
+  /auth/status:
+    get:
+      operationId: checkAuth
+      summary: Check current authentication status
+      responses:
+        "200":
+          description: Current authentication state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthStatus"
+
+  /auth/service-account:
+    post:
+      operationId: setServiceAccount
+      summary: Configure service account key file path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetServiceAccountRequest"
+      responses:
+        "200":
+          description: Updated authentication status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthStatus"
+        "400":
+          description: File not found or invalid key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Error description (file not found, invalid key)
+                required:
+                  - message
+
+  /ssh/configure:
+    post:
+      operationId: configureSsh
+      summary: Run gcloud compute config-ssh
+      responses:
+        "200":
+          description: SSH configuration applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SshConfigResult"
+        "500":
+          description: gcloud CLI error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GcloudError"
+
+  /config/preferences:
+    get:
+      operationId: getPreferences
+      summary: Get stored user preferences
+      responses:
+        "200":
+          description: Current user preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPreferences"
+    post:
+      operationId: setPreferences
+      summary: Save user preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserPreferences"
+      responses:
+        "200":
+          description: Saved preferences echoed back
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPreferences"
+
+components:
+  schemas:
+    Disk:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Disk name
+        sizeGb:
+          type: integer
+          description: Disk size in GB
+        status:
+          type: string
+          enum: [READY, CREATING, RESTORING, FAILED, DELETING]
+          description: Current disk status
+        type:
+          type: string
+          enum: [pd-standard, pd-ssd, pd-balanced]
+          description: Disk type
+        attachedTo:
+          type: string
+          nullable: true
+          description: Instance name if attached, null if not
+      required: [name, sizeGb, status, type]
+
+    MachineConfig:
+      type: object
+      properties:
+        machineType:
+          type: string
+          description: "e.g., n1-standard-8"
+        gpuType:
+          type: string
+          nullable: true
+          description: "e.g., nvidia-tesla-t4, null for no GPU"
+        gpuCount:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: Number of GPUs
+        spot:
+          type: boolean
+          description: true for spot, false for on-demand
+      required: [machineType, spot]
+
+    PricingEstimate:
+      type: object
+      properties:
+        spotHourly:
+          type: number
+          description: Spot price per hour in USD
+        ondemandHourly:
+          type: number
+          description: On-demand price per hour in USD
+        currency:
+          type: string
+          default: "USD"
+          description: Currency code
+        breakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/PricingLineItem"
+          description: Itemized cost breakdown
+      required: [spotHourly, ondemandHourly, currency, breakdown]
+
+    PricingLineItem:
+      type: object
+      properties:
+        label:
+          type: string
+          description: "e.g., 4x vCPU, 30 GB Memory, 1x NVIDIA T4"
+        spotCost:
+          type: number
+          description: Spot cost for this component
+        ondemandCost:
+          type: number
+          description: On-demand cost for this component
+      required: [label, spotCost, ondemandCost]
+
+    VmStatusUpdate:
+      type: object
+      description: |
+        Event payload for VM status changes.
+        Also used as the payload for the vm-status-update Tauri event.
+      properties:
+        diskName:
+          type: string
+          description: Disk name
+        instanceName:
+          type: string
+          description: Instance name
+        status:
+          type: string
+          enum: [Running, Starting, Stopping, Stopped, NotFound]
+          description: Current VM status
+        machineType:
+          type: string
+          nullable: true
+          description: Machine type if known
+        gpuType:
+          type: string
+          nullable: true
+          description: GPU type if applicable
+        gpuCount:
+          type: integer
+          nullable: true
+          description: GPU count if applicable
+        memoryGb:
+          type: number
+          nullable: true
+          description: Memory in GB if known
+      required: [diskName, instanceName, status]
+
+    AuthStatus:
+      type: object
+      properties:
+        authenticated:
+          type: boolean
+          description: Whether the user is authenticated
+        method:
+          type: string
+          enum: [gcloud, service-account]
+          description: Authentication method
+        account:
+          type: string
+          nullable: true
+          description: Email or service account ID
+      required: [authenticated, method]
+
+    UserPreferences:
+      type: object
+      properties:
+        project:
+          type: string
+          description: GCP project ID
+        zone:
+          type: string
+          description: GCP zone
+        defaultMachineType:
+          type: string
+          nullable: true
+          description: Default machine type
+        defaultGpuType:
+          type: string
+          nullable: true
+          description: Default GPU type
+        defaultGpuCount:
+          type: integer
+          nullable: true
+          description: Default GPU count
+        defaultSpot:
+          type: boolean
+          default: true
+          description: Whether to default to spot instances
+        serviceAccountKeyPath:
+          type: string
+          nullable: true
+          description: Path to service account JSON key file
+      required: [project, zone]
+
+    ConfigPreset:
+      type: object
+      properties:
+        name:
+          type: string
+          description: "e.g., ML Training"
+        machineType:
+          type: string
+          description: Machine type identifier
+        gpuType:
+          type: string
+          nullable: true
+          description: GPU type or null for no GPU
+        gpuCount:
+          type: integer
+          nullable: true
+          description: Number of GPUs or null
+        description:
+          type: string
+          description: "e.g., 8 vCPU / 30GB / 4x T4"
+      required: [name, machineType, description]
+
+    GcloudError:
+      type: object
+      properties:
+        message:
+          type: string
+        command:
+          type: string
+        exitCode:
+          type: integer
+      required: [message, command, exitCode]
+
+    ValidationError:
+      type: object
+      properties:
+        message:
+          type: string
+        field:
+          type: string
+      required: [message, field]
+
+    StartVmRequest:
+      type: object
+      properties:
+        diskName:
+          type: string
+          description: Name of the persistent disk to attach
+        config:
+          $ref: "#/components/schemas/MachineConfig"
+      required: [diskName, config]
+
+    StopVmRequest:
+      type: object
+      properties:
+        instanceName:
+          type: string
+          description: Name of the VM instance to delete
+      required: [instanceName]
+
+    SetServiceAccountRequest:
+      type: object
+      properties:
+        keyPath:
+          type: string
+          description: Path to the service account JSON key file
+      required: [keyPath]
+
+    SshConfigResult:
+      type: object
+      properties:
+        sshHost:
+          type: string
+          description: SSH host alias for the configured instance
+        configPath:
+          type: string
+          description: Path to the SSH config file that was updated
+      required: [sshHost, configPath]

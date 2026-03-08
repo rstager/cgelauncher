@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GCE VM Launcher - UI Mockup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e1e4e8; height: 100vh; display: flex; flex-direction: column; }
+
+  /* Top Bar */
+  .topbar { background: #161b22; border-bottom: 1px solid #30363d; padding: 12px 20px; display: flex; align-items: center; gap: 16px; }
+  .topbar h1 { font-size: 16px; font-weight: 600; color: #f0f3f6; margin-right: auto; }
+  .topbar label { font-size: 12px; color: #8b949e; }
+  .topbar select, .topbar input[type="text"] { background: #0d1117; border: 1px solid #30363d; color: #e1e4e8; padding: 4px 8px; border-radius: 4px; font-size: 13px; }
+  .topbar select { min-width: 140px; }
+  .topbar input[type="text"] { width: 160px; }
+  .auth-badge { font-size: 11px; padding: 3px 8px; border-radius: 10px; background: #1f6b2b; color: #7ee787; }
+  .settings-btn { background: none; border: 1px solid #30363d; color: #8b949e; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  .settings-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+
+  /* Main Layout */
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* Left Panel - Disk List */
+  .disk-panel { width: 300px; min-width: 260px; background: #161b22; border-right: 1px solid #30363d; display: flex; flex-direction: column; }
+  .disk-header { padding: 12px 16px; border-bottom: 1px solid #30363d; display: flex; align-items: center; justify-content: space-between; }
+  .disk-header h2 { font-size: 13px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
+  .refresh-btn { background: none; border: none; color: #8b949e; cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 4px; }
+  .refresh-btn:hover { background: #30363d; color: #e1e4e8; }
+  .disk-list { flex: 1; overflow-y: auto; }
+  .disk-item { padding: 12px 16px; border-bottom: 1px solid #21262d; cursor: pointer; transition: background 0.15s; }
+  .disk-item:hover { background: #1c2128; }
+  .disk-item.selected { background: #1c2128; border-left: 3px solid #58a6ff; }
+  .disk-item-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .status-dot.green { background: #3fb950; box-shadow: 0 0 6px rgba(63, 185, 80, 0.4); }
+  .status-dot.yellow { background: #d29922; box-shadow: 0 0 6px rgba(210, 153, 34, 0.4); animation: pulse 1.5s ease-in-out infinite; }
+  .status-dot.red { background: #6e4040; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .disk-name { font-size: 14px; font-weight: 500; color: #f0f3f6; }
+  .disk-meta { font-size: 11px; color: #8b949e; margin-left: 18px; }
+  .disk-meta .running-info { color: #7ee787; }
+
+  /* Right Panel - Config */
+  .config-panel { flex: 1; padding: 24px; overflow-y: auto; }
+  .config-panel h2 { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+  .config-subtitle { font-size: 13px; color: #8b949e; margin-bottom: 20px; }
+
+  /* Presets */
+  .section-label { font-size: 12px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+  .presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .preset-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 14px; cursor: pointer; transition: all 0.15s; }
+  .preset-card:hover { border-color: #58a6ff; }
+  .preset-card.selected { border-color: #58a6ff; background: #1c2128; box-shadow: 0 0 0 1px #58a6ff; }
+  .preset-name { font-size: 13px; font-weight: 600; color: #f0f3f6; margin-bottom: 4px; }
+  .preset-specs { font-size: 11px; color: #8b949e; line-height: 1.5; }
+  .preset-price { font-size: 12px; color: #d29922; margin-top: 6px; }
+
+  /* Advanced Config */
+  .advanced-toggle { background: none; border: none; color: #58a6ff; font-size: 13px; cursor: pointer; padding: 6px 0; margin-bottom: 12px; display: flex; align-items: center; gap: 4px; }
+  .advanced-toggle:hover { text-decoration: underline; }
+  .advanced-section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin-bottom: 20px; display: none; }
+  .advanced-section.open { display: block; }
+  .config-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .config-row label { font-size: 13px; color: #8b949e; width: 110px; flex-shrink: 0; }
+  .config-row select { background: #0d1117; border: 1px solid #30363d; color: #e1e4e8; padding: 6px 10px; border-radius: 4px; font-size: 13px; flex: 1; max-width: 260px; }
+
+  /* Pricing */
+  .pricing-box { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+  .pricing-box h3 { font-size: 13px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+  .pricing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .price-card { padding: 10px 12px; border-radius: 6px; border: 1px solid #30363d; }
+  .price-card.spot { border-color: #3fb950; background: rgba(63, 185, 80, 0.05); }
+  .price-card.spot .price-label { color: #3fb950; }
+  .price-label { font-size: 11px; color: #8b949e; margin-bottom: 2px; }
+  .price-value { font-size: 20px; font-weight: 700; color: #f0f3f6; }
+  .price-monthly { font-size: 11px; color: #8b949e; }
+  .pricing-breakdown { border-top: 1px solid #21262d; padding-top: 10px; }
+  .breakdown-row { display: flex; justify-content: space-between; font-size: 12px; color: #8b949e; margin-bottom: 4px; }
+  .breakdown-row span:last-child { color: #e1e4e8; }
+
+  /* Provisioning Toggle */
+  .toggle-group { display: flex; gap: 0; margin-bottom: 20px; }
+  .toggle-btn { padding: 8px 20px; border: 1px solid #30363d; background: #0d1117; color: #8b949e; font-size: 13px; cursor: pointer; transition: all 0.15s; }
+  .toggle-btn:first-child { border-radius: 6px 0 0 6px; }
+  .toggle-btn:last-child { border-radius: 0 6px 6px 0; border-left: none; }
+  .toggle-btn.active { background: #1f6b2b; border-color: #3fb950; color: #7ee787; }
+  .toggle-btn.active-alt { background: #30363d; border-color: #484f58; color: #e1e4e8; }
+
+  /* Controls */
+  .controls { display: flex; gap: 12px; align-items: center; }
+  .btn { padding: 10px 28px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+  .btn-start { background: #238636; color: #fff; }
+  .btn-start:hover { background: #2ea043; }
+  .btn-stop { background: #da3633; color: #fff; }
+  .btn-stop:hover { background: #e5534b; }
+  .btn-stop:disabled, .btn-start:disabled { opacity: 0.4; cursor: not-allowed; }
+  .vm-name-hint { font-size: 12px; color: #8b949e; }
+
+  /* Status Bar */
+  .statusbar { background: #161b22; border-top: 1px solid #30363d; padding: 8px 20px; font-size: 12px; color: #8b949e; display: flex; align-items: center; gap: 12px; }
+  .statusbar .ssh-cmd { font-family: 'Courier New', monospace; color: #79c0ff; background: #0d1117; padding: 2px 8px; border-radius: 3px; }
+  .statusbar .ssh-status { color: #7ee787; }
+
+  /* Resource Summary (shown for running VM) */
+  .resource-summary { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 14px; margin-bottom: 20px; }
+  .resource-summary h3 { font-size: 13px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+  .resource-chips { display: flex; gap: 10px; flex-wrap: wrap; }
+  .resource-chip { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 6px 12px; font-size: 12px; }
+  .resource-chip .chip-label { color: #8b949e; }
+  .resource-chip .chip-value { color: #f0f3f6; font-weight: 600; margin-left: 4px; }
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <h1>GCE VM Launcher</h1>
+  <label>Project</label>
+  <input type="text" value="my-ml-project" />
+  <label>Zone</label>
+  <select>
+    <option>us-central1-a</option>
+    <option>us-west1-b</option>
+    <option>europe-west4-a</option>
+  </select>
+  <span class="auth-badge">gcloud authenticated</span>
+  <button class="settings-btn">Settings</button>
+</div>
+
+<!-- Main Content -->
+<div class="main">
+  <!-- Left Panel: Disk List -->
+  <div class="disk-panel">
+    <div class="disk-header">
+      <h2>Disks</h2>
+      <button class="refresh-btn" title="Refresh">&#x21bb;</button>
+    </div>
+    <div class="disk-list">
+      <!-- Running VM -->
+      <div class="disk-item selected">
+        <div class="disk-item-header">
+          <div class="status-dot green"></div>
+          <span class="disk-name">ml-training-disk</span>
+        </div>
+        <div class="disk-meta">
+          <span class="running-info">n1-standard-8 &middot; 30GB &middot; 4x T4</span>
+        </div>
+      </div>
+      <!-- Starting VM -->
+      <div class="disk-item">
+        <div class="disk-item-header">
+          <div class="status-dot yellow"></div>
+          <span class="disk-name">dev-workspace</span>
+        </div>
+        <div class="disk-meta">Starting...</div>
+      </div>
+      <!-- Stopped -->
+      <div class="disk-item">
+        <div class="disk-item-header">
+          <div class="status-dot red"></div>
+          <span class="disk-name">inference-server</span>
+        </div>
+        <div class="disk-meta">Stopped &middot; 200 GB pd-ssd</div>
+      </div>
+      <!-- Stopped -->
+      <div class="disk-item">
+        <div class="disk-item-header">
+          <div class="status-dot red"></div>
+          <span class="disk-name">jupyter-notebook</span>
+        </div>
+        <div class="disk-meta">Stopped &middot; 100 GB pd-balanced</div>
+      </div>
+      <!-- Stopped -->
+      <div class="disk-item">
+        <div class="disk-item-header">
+          <div class="status-dot red"></div>
+          <span class="disk-name">data-processing</span>
+        </div>
+        <div class="disk-meta">Stopped &middot; 500 GB pd-standard</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel: Config -->
+  <div class="config-panel">
+    <h2>ml-training-disk</h2>
+    <div class="config-subtitle">VM: ml-training-disk-vm &middot; Running</div>
+
+    <!-- Resource Summary (shown when running) -->
+    <div class="resource-summary">
+      <h3>Running Instance</h3>
+      <div class="resource-chips">
+        <div class="resource-chip">
+          <span class="chip-label">CPU</span>
+          <span class="chip-value">8 vCPU</span>
+        </div>
+        <div class="resource-chip">
+          <span class="chip-label">Memory</span>
+          <span class="chip-value">30 GB</span>
+        </div>
+        <div class="resource-chip">
+          <span class="chip-label">GPU</span>
+          <span class="chip-value">4x NVIDIA T4</span>
+        </div>
+        <div class="resource-chip">
+          <span class="chip-label">Provisioning</span>
+          <span class="chip-value">Spot</span>
+        </div>
+        <div class="resource-chip">
+          <span class="chip-label">Cost</span>
+          <span class="chip-value">$1.42/hr</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls" style="margin-bottom: 24px;">
+      <button class="btn btn-start" disabled>Start VM</button>
+      <button class="btn btn-stop">Stop VM</button>
+      <span class="vm-name-hint">Will delete VM, disk is preserved</span>
+    </div>
+
+    <hr style="border: none; border-top: 1px solid #30363d; margin: 0 0 24px 0;">
+
+    <!-- Below: config for stopped disk (inference-server example) -->
+    <h2 style="color: #8b949e; font-size: 14px; margin-bottom: 16px;">Configuration (for next launch)</h2>
+
+    <!-- Presets -->
+    <div class="section-label">Quick Presets</div>
+    <div class="presets">
+      <div class="preset-card selected">
+        <div class="preset-name">ML Training</div>
+        <div class="preset-specs">8 vCPU &middot; 30 GB &middot; 4x T4</div>
+        <div class="preset-price">~$1.42/hr spot</div>
+      </div>
+      <div class="preset-card">
+        <div class="preset-name">Light GPU</div>
+        <div class="preset-specs">4 vCPU &middot; 15 GB &middot; 1x T4</div>
+        <div class="preset-price">~$0.45/hr spot</div>
+      </div>
+      <div class="preset-card">
+        <div class="preset-name">Heavy Training</div>
+        <div class="preset-specs">16 vCPU &middot; 60 GB &middot; 4x V100</div>
+        <div class="preset-price">~$4.20/hr spot</div>
+      </div>
+      <div class="preset-card">
+        <div class="preset-name">CPU Only</div>
+        <div class="preset-specs">8 vCPU &middot; 32 GB &middot; No GPU</div>
+        <div class="preset-price">~$0.19/hr spot</div>
+      </div>
+    </div>
+
+    <!-- Advanced Toggle -->
+    <button class="advanced-toggle" onclick="document.querySelector('.advanced-section').classList.toggle('open'); this.querySelector('.arrow').textContent = document.querySelector('.advanced-section').classList.contains('open') ? '&#9660;' : '&#9654;'">
+      <span class="arrow">&#9654;</span>&nbsp; Advanced Configuration
+    </button>
+
+    <div class="advanced-section">
+      <div class="config-row">
+        <label>Machine Type</label>
+        <select>
+          <option>n1-standard-4</option>
+          <option selected>n1-standard-8</option>
+          <option>n1-standard-16</option>
+          <option>n1-standard-32</option>
+          <option>n1-highmem-8</option>
+          <option>n1-highmem-16</option>
+          <option>a2-highgpu-1g</option>
+          <option>a2-highgpu-2g</option>
+        </select>
+      </div>
+      <div class="config-row">
+        <label>GPU Type</label>
+        <select>
+          <option>None</option>
+          <option selected>NVIDIA Tesla T4</option>
+          <option>NVIDIA Tesla V100</option>
+          <option>NVIDIA Tesla P100</option>
+          <option>NVIDIA Tesla A100</option>
+        </select>
+      </div>
+      <div class="config-row">
+        <label>GPU Count</label>
+        <select>
+          <option>1</option>
+          <option>2</option>
+          <option selected>4</option>
+          <option>8</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Provisioning Toggle -->
+    <div class="section-label">Provisioning</div>
+    <div class="toggle-group">
+      <button class="toggle-btn active">Spot (up to 91% off)</button>
+      <button class="toggle-btn" onclick="this.classList.add('active-alt'); this.previousElementSibling.classList.remove('active')">On-Demand</button>
+    </div>
+
+    <!-- Pricing -->
+    <div class="pricing-box">
+      <h3>Estimated Cost</h3>
+      <div class="pricing-grid">
+        <div class="price-card spot">
+          <div class="price-label">Spot Pricing</div>
+          <div class="price-value">$1.42<span style="font-size: 14px; font-weight: 400;">/hr</span></div>
+          <div class="price-monthly">~$1,023/mo (730 hrs)</div>
+        </div>
+        <div class="price-card">
+          <div class="price-label">On-Demand Pricing</div>
+          <div class="price-value">$4.86<span style="font-size: 14px; font-weight: 400;">/hr</span></div>
+          <div class="price-monthly">~$3,548/mo (730 hrs)</div>
+        </div>
+      </div>
+      <div class="pricing-breakdown">
+        <div class="breakdown-row">
+          <span>8x vCPU (n1-standard-8)</span>
+          <span>$0.08 / $0.25</span>
+        </div>
+        <div class="breakdown-row">
+          <span>30 GB Memory</span>
+          <span>$0.04 / $0.13</span>
+        </div>
+        <div class="breakdown-row">
+          <span>4x NVIDIA Tesla T4</span>
+          <span>$1.30 / $4.48</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Status Bar -->
+<div class="statusbar">
+  <span class="ssh-status">SSH Ready</span>
+  <span>Connect via:</span>
+  <span class="ssh-cmd">ssh ml-training-disk-vm.us-central1-a.my-ml-project</span>
+</div>
+
+</body>
+</html>

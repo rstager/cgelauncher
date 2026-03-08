@@ -1,0 +1,399 @@
+name: spec-driven
+version: 1
+description: Default OpenSpec workflow - proposal → specs → design → datamodels → apis → testing → tasks
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    description: Initial proposal document outlining the change
+    template: proposal.md
+    instruction: >
+      Create the proposal document that establishes WHY this change is needed.
+
+
+      Sections:
+
+      - **Why**: 1-2 sentences on the problem or opportunity. What problem does
+      this solve? Why now?
+
+      - **What Changes**: Bullet list of changes. Be specific about new
+      capabilities, modifications, or removals. Mark breaking changes with
+      **BREAKING**.
+
+      - **Capabilities**: Identify which specs will be created or modified:
+        - **New Capabilities**: List capabilities being introduced. Each becomes a new `specs/<name>/spec.md`. Use kebab-case names (e.g., `user-auth`, `data-export`).
+        - **Modified Capabilities**: List existing capabilities whose REQUIREMENTS are changing. Only include if spec-level behavior changes (not just implementation details). Each needs a delta spec file. Check `openspec/specs/` for existing spec names. Leave empty if no requirement changes.
+      - **Impact**: Affected code, APIs, dependencies, or systems.
+
+
+      IMPORTANT: The Capabilities section is critical. It creates the contract
+      between
+
+      proposal and specs phases. Research existing specs before filling this in.
+
+      Each capability listed here will need a corresponding spec file.
+
+
+      Keep it concise (1-2 pages). Focus on the "why" not the "how" -
+
+      implementation details belong in design.md.
+
+
+      This is the foundation - specs, design, and tasks all build on this.
+    requires: []
+  - id: specs
+    generates: specs/**/*.md
+    description: Detailed specifications for the change
+    template: spec.md
+    instruction: >
+      Create specification files that define WHAT the system should do.
+
+
+      Create one spec file per capability listed in the proposal's Capabilities
+      section.
+
+      - New capabilities: use the exact kebab-case name from the proposal
+      (specs/<capability>/spec.md).
+
+      - Modified capabilities: use the existing spec folder name from
+      openspec/specs/<capability>/ when creating the delta spec at
+      specs/<capability>/spec.md.
+
+
+      Delta operations (use ## headers):
+
+      - **ADDED Requirements**: New capabilities
+
+      - **MODIFIED Requirements**: Changed behavior - MUST include full updated
+      content
+
+      - **REMOVED Requirements**: Deprecated features - MUST include **Reason**
+      and **Migration**
+
+      - **RENAMED Requirements**: Name changes only - use FROM:/TO: format
+
+
+      Format requirements:
+
+      - Each requirement: `### Requirement: <name>` followed by description
+
+      - Use SHALL/MUST for normative requirements (avoid should/may)
+
+      - Each scenario: `#### Scenario: <name>` with WHEN/THEN format
+
+      - **CRITICAL**: Scenarios MUST use exactly 4 hashtags (`####`). Using 3
+      hashtags or bullets will fail silently.
+
+      - Every requirement MUST have at least one scenario.
+
+
+      MODIFIED requirements workflow:
+
+      1. Locate the existing requirement in openspec/specs/<capability>/spec.md
+
+      2. Copy the ENTIRE requirement block (from `### Requirement:` through all
+      scenarios)
+
+      3. Paste under `## MODIFIED Requirements` and edit to reflect new behavior
+
+      4. Ensure header text matches exactly (whitespace-insensitive)
+
+
+      Common pitfall: Using MODIFIED with partial content loses detail at
+      archive time.
+
+      If adding new concerns without changing existing behavior, use ADDED
+      instead.
+
+
+      Example:
+
+      ```
+
+      ## ADDED Requirements
+
+
+      ### Requirement: User can export data
+
+      The system SHALL allow users to export their data in CSV format.
+
+
+      #### Scenario: Successful export
+
+      - **WHEN** user clicks "Export" button
+
+      - **THEN** system downloads a CSV file with all user data
+
+
+      ## REMOVED Requirements
+
+
+      ### Requirement: Legacy export
+
+      **Reason**: Replaced by new export system
+
+      **Migration**: Use new export endpoint at /api/v2/export
+
+      ```
+
+
+      Specs should be testable - each scenario is a potential test case.
+    requires:
+      - proposal
+  - id: design
+    generates: design.md
+    description: Technical design document with implementation details
+    template: design.md
+    instruction: >
+      Create the design document that explains HOW to implement the change.
+
+
+      When to include design.md (create only if any apply):
+
+      - Cross-cutting change (multiple services/modules) or new architectural
+      pattern
+
+      - New external dependency or significant data model changes
+
+      - Security, performance, or migration complexity
+
+      - Ambiguity that benefits from technical decisions before coding
+
+
+      Sections:
+
+      - **Context**: Background, current state, constraints, stakeholders
+
+      - **Goals / Non-Goals**: What this design achieves and explicitly excludes
+
+      - **Decisions**: Key technical choices with rationale (why X over Y?).
+      Include alternatives considered for each decision.
+
+      - **Architecture Overview**: High-level, human-readable software
+      architecture description covering major components and interactions.
+
+      - **Artifact References**: Reference `datamodels.yaml` and `apis.yaml`
+      and explain how they map to this design.
+
+      - **Model/API Narrative**: Describe the human-readable purpose and intent
+      of data models and API contracts in design.md, while keeping authoritative
+      programmatic definitions in `datamodels.yaml` and `apis.yaml`.
+
+      - **Risks / Trade-offs**: Known limitations, things that could go wrong.
+      Format: [Risk] → Mitigation
+
+      - **Migration Plan**: Steps to deploy, rollback strategy (if applicable)
+
+      - **Open Questions**: Outstanding decisions or unknowns to resolve
+
+
+      Focus on architecture and approach, not line-by-line implementation.
+
+      Reference the proposal for motivation and specs for requirements.
+
+
+      Good design docs explain the "why" behind technical decisions.
+    requires:
+      - proposal
+  - id: datamodels
+    generates: datamodels.yaml
+    description: Data model definitions as JSON Schema written in YAML
+    template: datamodels.yaml
+    instruction: >
+      Create `datamodels.yaml` as formal JSON Schema written in YAML, derived
+      from specs and design.
+
+
+      Requirements:
+
+      - Must be valid JSON Schema (draft 2020-12)
+
+      - Must include `$schema`, `type`, `properties`, and `required` where
+      applicable
+
+      - Model definitions should be expressed as schema objects (not prose-only
+      lists)
+
+      - Use `description`, `format`, and constraints (`enum`, `minLength`,
+      etc.) where relevant
+
+      - Keep schema names aligned with `apis.yaml` component schema naming
+
+
+      Include, as needed:
+
+      - Entities or domain objects
+
+      - Fields, types, constraints, and relationships
+
+      - Optional persistence considerations (indexes, keys, or lifecycle notes)
+
+
+      Keep it implementation-aware but technology-agnostic when possible.
+    requires:
+      - specs
+      - design
+  - id: apis
+    generates: apis.yaml
+    description: API contract document in OpenAPI-compatible format
+    template: apis.yaml
+    instruction: >
+      Create `apis.yaml` as an OpenAPI-compatible API contract for any API
+      changes in this proposal.
+
+
+      Requirements:
+
+      - Must be OpenAPI compatible (OpenAPI 3.x format)
+
+      - Include paths, operations, request/response schemas, and error responses
+
+      - Reusable request/response bodies MUST be defined under
+      `components.schemas` and referenced via `$ref`
+
+      - Inline schemas are allowed only for one-off payloads not reused across
+      operations
+
+      Preferred pattern: `$ref` to `components.schemas`.
+
+      Exception pattern: inline schema only for a one-off payload.
+
+      - Keep schema references consistent with `datamodels.yaml` naming
+
+
+      If no API changes are needed, include a minimal valid OpenAPI document
+      with explanatory notes in `info.description`.
+    requires:
+      - specs
+      - design
+  - id: testing
+    generates: testing.md
+    description: Test strategy and explicit test case definitions for the change
+    template: testing.md
+    instruction: >
+      Create the testing artifact that defines how this change will preserve a
+      full automated test suite.
+
+
+      This document is the source of truth for writing automated tests.
+
+
+      Sections:
+
+      - **Test Strategy**: List test types required for this change (for
+      example: unit, integration, end-to-end) and why.
+
+      - **Framework and Tooling**: Specify the testing framework and tools used
+      by this codebase/language stack.
+
+      - **Automation Plan**: Define commands and CI execution details for
+      non-interactive automated runs.
+
+      - **Coverage and Scope**: State what behaviors this change adds/modifies
+      and what tests will be added/updated.
+
+      - **Test Cases**: Explicit list of test cases to implement, each with:
+        - **ID**: Stable identifier (for example: TC-001)
+        - **Name**: Short test case title
+        - **Purpose**: Why this test exists / risk it covers
+        - **Type**: Unit, integration, end-to-end, contract, etc.
+        - **Preconditions**: Required setup/state
+        - **Steps/Input**: Action or input that triggers behavior
+        - **Expected Results**: Observable outcomes/assertions
+        - **Priority**: Critical, high, medium, low
+
+      - **Traceability Matrix**: Map each spec requirement/scenario to one or
+      more test case IDs, and ensure every test case links back to at least one
+      requirement.
+
+      - **Source Alignment**: Treat `datamodels.yaml` and `apis.yaml` as
+      authoritative programmatic definitions when deriving automated test cases.
+      Treat `design.md` as the human-readable rationale and intent.
+
+      - **Merge Gates**: Confirm all required automated tests must pass before
+      merge.
+
+
+      Requirements:
+
+      - The project SHALL maintain a full automated test suite.
+
+      - Any behavior change SHALL include corresponding automated test updates.
+
+      - Test cases SHALL explicitly define purpose and expected results.
+
+      - Testing artifacts SHALL include bidirectional traceability between spec
+      requirements/scenarios and test case IDs.
+
+      - The framework may vary by language/tooling, but automated execution is
+      mandatory.
+
+
+      Keep this artifact concise and actionable.
+    requires:
+      - specs
+      - design
+      - datamodels
+      - apis
+  - id: tasks
+    generates: tasks.md
+    description: Implementation checklist with trackable tasks
+    template: tasks.md
+    instruction: >
+      Create the task list that breaks down the implementation work.
+
+
+      **IMPORTANT: Follow the template below exactly.** The apply phase parses
+
+      checkbox format to track progress. Tasks not using `- [ ]` won't be
+      tracked.
+
+
+      Guidelines:
+
+      - Group related tasks under ## numbered headings
+
+      - Each task MUST be a checkbox: `- [ ] X.Y Task description`
+
+      - Tasks should be small enough to complete in one session
+
+      - Order tasks by dependency (what must be done first?)
+
+
+      Example:
+
+      ```
+
+      ## 1. Setup
+
+
+      - [ ] 1.1 Create new module structure
+
+      - [ ] 1.2 Add dependencies to package.json
+
+
+      ## 2. Core Implementation
+
+
+      - [ ] 2.1 Implement data export function
+
+      - [ ] 2.2 Add CSV formatting utilities
+
+      ```
+
+
+      Reference specs for what needs to be built, design for how to build it.
+
+      Each task should be verifiable - you know when it's done.
+    requires:
+      - specs
+      - design
+      - datamodels
+      - apis
+      - testing
+apply:
+  requires:
+    - tasks
+  tracks: tasks.md
+  instruction: |
+    Read context files, work through pending tasks, mark complete as you go.
+    Pause if you hit blockers or need clarification.

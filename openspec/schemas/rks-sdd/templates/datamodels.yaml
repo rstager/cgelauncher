@@ -1,0 +1,24 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://example.com/schemas/change/datamodels.schema.yaml
+title: Change Data Models
+description: JSON Schema definitions for data models introduced or modified by this change.
+type: object
+additionalProperties: false
+properties:
+  ExampleEntity:
+    type: object
+    description: Replace with domain entity description.
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        description: Unique identifier.
+      createdAt:
+        type: string
+        format: date-time
+        description: Creation timestamp.
+    required:
+      - id
+      - createdAt
+required:
+  - ExampleEntity
