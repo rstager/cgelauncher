@@ -1,6 +1,6 @@
 # GCE VM Launcher
 
-A lightweight desktop app for managing Google Compute Engine virtual machines with persistent disks.  To control costs, this app make it easy for you to only pay for the VM when you are actively using it. When you are not using the VM, you only pay for storage. It also makes it easy to switch from a low cost VM when you dont need a lot of compute, and switch to a larger VM with GPUs when you want to do some heavy ML workflows.
+A lightweight desktop app for managing Google Compute Engine virtual machines with persistent disks.  To control costs, this app make it easy for you to only pay for the VM when you are actively using it. When you are not using the VM, you only pay for storage. It also makes it easy to use a low cost VM when you dont need a lot of compute, and then switch to a larger VM with GPUs when you want to do some heavy ML workflows.
 
 ![GCE VM Launcher](gcelauncher.png)
 
