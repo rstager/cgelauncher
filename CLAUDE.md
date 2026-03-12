@@ -76,6 +76,19 @@ Names must describe domain behavior, not implementation history.
 
 
 
+## Release Process
+
+When creating a release:
+
+1. Update the version in **all three** places before tagging:
+   - `src-tauri/tauri.conf.json` → `"version"`
+   - `src-tauri/Cargo.toml` → `version`
+   - `Cargo.lock` (auto-updated by `cargo build` after Cargo.toml change)
+2. Commit the version bump.
+3. Tag as `v<version>` (e.g., `v0.1.1`) and push both the commit and tag.
+4. The CI workflow (`.github/workflows/release.yml`) triggers on `v*` tags and creates a draft GitHub Release with platform installers.
+5. The tag version **must match** the version in `tauri.conf.json` — the tauri-action uses `v__VERSION__` to locate build artifacts.
+
 ## Workspace Hygiene
 
 - Use `scratchpad/` for temporary docs, one-off scripts, experiments, and throwaway artifacts.
