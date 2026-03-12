@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegui/nicegui/main/tauri.conf.schema.json",
   "productName": "GCE VM Launcher",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.cgelauncher.app",
   "build": {
     "frontendDist": "../dist",
