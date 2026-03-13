@@ -475,13 +475,52 @@ pub fn build_runner_from_preferences(preferences: &UserPreferences) -> Arc<dyn G
     }
 }
 
+/// Locate the gcloud binary, checking common install paths on Windows.
+fn find_gcloud_path() -> String {
+    // First, try bare "gcloud" (works if it's on PATH)
+    if which_exists("gcloud") {
+        return "gcloud".to_string();
+    }
+
+    // On Windows, check known install locations
+    #[cfg(target_os = "windows")]
+    {
+        use std::path::PathBuf;
+        let candidates: Vec<PathBuf> = [
+            std::env::var("LOCALAPPDATA").ok().map(|p| PathBuf::from(p).join("Google/Cloud SDK/google-cloud-sdk/bin/gcloud.cmd")),
+            std::env::var("APPDATA").ok().map(|p| PathBuf::from(p).join("Google/Cloud SDK/google-cloud-sdk/bin/gcloud.cmd")),
+            Some(PathBuf::from("C:/Program Files (x86)/Google/Cloud SDK/google-cloud-sdk/bin/gcloud.cmd")),
+            Some(PathBuf::from("C:/Program Files/Google/Cloud SDK/google-cloud-sdk/bin/gcloud.cmd")),
+            std::env::var("USERPROFILE").ok().map(|p| PathBuf::from(p).join("AppData/Local/Google/Cloud SDK/google-cloud-sdk/bin/gcloud.cmd")),
+        ].into_iter().flatten().collect();
+
+        for path in candidates {
+            if path.exists() {
+                return path.to_string_lossy().to_string();
+            }
+        }
+    }
+
+    // Fallback: return "gcloud" and let the error propagate naturally
+    "gcloud".to_string()
+}
+
+fn which_exists(cmd: &str) -> bool {
+    std::process::Command::new(cmd)
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .is_ok()
+}
+
 #[async_trait]
 impl GcloudRunner for CliRunner {
     async fn run(&self, args: &[&str]) -> Result<String, GcloudError> {
         let full_args = self.build_args(args);
         let cmd_str = format!("gcloud {}", full_args.join(" "));
 
-        let mut command = Command::new("gcloud");
+        let mut command = Command::new(find_gcloud_path());
         command.args(&full_args);
 
         if let Some(ref cred_path) = self.credential_file {
