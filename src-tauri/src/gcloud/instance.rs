@@ -2,6 +2,7 @@ use crate::gcloud::auto_stop;
 use crate::gcloud::executor::{GcloudError, GcloudRunner};
 use crate::models::instance::VmStatus;
 use crate::models::machine::{has_builtin_gpu, MachineConfig};
+use std::io::Write;
 
 /// Parsed result from `gcloud compute instances describe`.
 pub struct InstanceDescription {
@@ -19,7 +20,22 @@ pub async fn create_instance(
     config: &MachineConfig,
 ) -> Result<String, GcloudError> {
     let instance_name = disk_name.to_string();
-    let arg_strings = build_create_instance_args(zone, disk_name, config);
+
+    // Write startup script to a temp file to avoid shell escaping issues on Windows
+    let mut script_file = tempfile::NamedTempFile::new().map_err(|e| GcloudError {
+        message: format!("Failed to create temp file for startup script: {e}"),
+        command: "create_instance".into(),
+        exit_code: -1,
+    })?;
+    script_file
+        .write_all(auto_stop::STARTUP_SCRIPT.as_bytes())
+        .map_err(|e| GcloudError {
+            message: format!("Failed to write startup script: {e}"),
+            command: "create_instance".into(),
+            exit_code: -1,
+        })?;
+
+    let arg_strings = build_create_instance_args(zone, disk_name, config, script_file.path());
     let args: Vec<&str> = arg_strings.iter().map(String::as_str).collect();
     runner.run(&args).await?;
     Ok(instance_name)
@@ -29,6 +45,7 @@ pub fn build_create_instance_args(
     zone: &str,
     disk_name: &str,
     config: &MachineConfig,
+    startup_script_path: &std::path::Path,
 ) -> Vec<String> {
     let instance_name = disk_name.to_string();
     let zone_arg = format!("--zone={zone}");
@@ -57,8 +74,8 @@ pub fn build_create_instance_args(
     }
 
     args.push(format!(
-        "--metadata=startup-script={}",
-        auto_stop::STARTUP_SCRIPT
+        "--metadata-from-file=startup-script={}",
+        startup_script_path.to_string_lossy()
     ));
 
     args.push("--quiet".into());
@@ -352,22 +369,14 @@ mod tests {
             spot: false,
         };
 
-        let args = build_create_instance_args("us-central1-a", "test-disk", &config);
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let args = build_create_instance_args("us-central1-a", "test-disk", &config, tmp.path());
         let metadata_arg = args
             .iter()
-            .find(|a| a.starts_with("--metadata=startup-script="));
+            .find(|a| a.starts_with("--metadata-from-file=startup-script="));
         assert!(
             metadata_arg.is_some(),
-            "gcloud create args must include --metadata=startup-script="
-        );
-        let script = metadata_arg.unwrap();
-        assert!(
-            script.contains("auto-stop-check.sh"),
-            "startup script must install auto-stop-check.sh"
-        );
-        assert!(
-            script.contains("auto-stop.timer"),
-            "startup script must install auto-stop.timer"
+            "gcloud create args must include --metadata-from-file=startup-script="
         );
     }
 
