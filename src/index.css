@@ -228,11 +228,12 @@
 .select-field {
   background: var(--color-bg-input);
   border: 1px solid var(--color-border-default);
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
   padding: 6px 10px;
   border-radius: 4px;
   font-size: 13px;
   outline: none;
+  color-scheme: dark;
 }
 
 .select-field:focus {
@@ -240,8 +241,8 @@
 }
 
 .select-field option {
-  color: #000;
-  background: #fff;
+  color: var(--color-text-primary);
+  background: var(--color-bg-input);
 }
 
 /* Scrollbar styling for dark theme */

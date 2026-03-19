@@ -4,7 +4,7 @@ pub mod models;
 pub mod monitor;
 pub mod state;
 
-use gcloud::executor::CliRunner;
+use gcloud::executor::build_runner_from_preferences;
 use gcloud::pricing_fetch;
 use state::AppState;
 use std::sync::Arc;
@@ -12,10 +12,7 @@ use std::sync::Arc;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let preferences = commands::config::load_preferences();
-    let runner = Arc::new(CliRunner::new(
-        preferences.project.clone(),
-        preferences.service_account_key_path.clone(),
-    ));
+    let runner = build_runner_from_preferences(&preferences);
     // Load cached pricing from disk (instant, no network)
     let initial_pricing = pricing_fetch::load_cache();
     let app_state = AppState::new(runner, preferences, initial_pricing);

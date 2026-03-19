@@ -55,6 +55,8 @@ export interface UserPreferences {
   defaultGpuCount: number | null;
   defaultSpot: boolean;
   serviceAccountKeyPath: string | null;
+  executionMode: 'gcloud' | 'api';
+  apiAccessToken: string | null;
   customPresets: ConfigPreset[];
   hiddenPresets: string[];
   diskConfigs: Record<string, DiskConfig>;

@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use crate::gcloud::service_account::ServiceAccountCredential;
 use crate::models::UserPreferences;
 use reqwest::{Client, Method, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -122,31 +123,76 @@ impl CliRunner {
     }
 }
 
+enum ApiCredential {
+    StaticToken(String),
+    ServiceAccount(ServiceAccountCredential),
+    /// Holds a load error to surface on first use rather than at construction.
+    LoadError(String),
+}
+
 /// Executes Google Compute API requests directly (without requiring gcloud installed).
 pub struct ApiRunner {
     pub project: String,
-    pub access_token: Option<String>,
+    credential: Option<ApiCredential>,
     client: Client,
 }
 
 impl ApiRunner {
+    /// Backwards-compatible constructor: wraps a static token or leaves credential empty.
     pub fn new(project: String, access_token: Option<String>) -> Self {
         Self {
             project,
-            access_token,
+            credential: access_token
+                .filter(|t| !t.trim().is_empty())
+                .map(ApiCredential::StaticToken),
             client: Client::new(),
         }
     }
 
-    fn required_token(&self, command: &str) -> Result<String, GcloudError> {
-        self.access_token
-            .clone()
-            .filter(|t| !t.trim().is_empty())
-            .ok_or_else(|| GcloudError {
-                message: "API mode requires an access token".into(),
+    pub fn new_with_token(project: String, token: String) -> Self {
+        Self {
+            project,
+            credential: Some(ApiCredential::StaticToken(token)),
+            client: Client::new(),
+        }
+    }
+
+    /// Loads a service account JSON key file. Returns a runner that fails lazily
+    /// with the load error on first use if the file is invalid.
+    pub fn new_with_service_account(project: String, key_path: &str) -> Self {
+        let credential = match ServiceAccountCredential::from_file(key_path) {
+            Ok(cred) => ApiCredential::ServiceAccount(cred),
+            Err(e) => ApiCredential::LoadError(e.message),
+        };
+        Self {
+            project,
+            credential: Some(credential),
+            client: Client::new(),
+        }
+    }
+
+    async fn required_token(&self, command: &str) -> Result<String, GcloudError> {
+        match &self.credential {
+            Some(ApiCredential::StaticToken(t)) => Ok(t.clone()),
+            Some(ApiCredential::ServiceAccount(cred)) => cred.fetch_token(&self.client).await,
+            Some(ApiCredential::LoadError(msg)) => Err(GcloudError {
+                message: msg.clone(),
+                command: command.into(),
+                exit_code: 1,
+            }),
+            None => Err(GcloudError {
+                message: "API mode requires a service account key file or access token".into(),
                 command: command.into(),
                 exit_code: 401,
-            })
+            }),
+        }
+    }
+
+    fn account_name(&self) -> String {
+        match &self.credential {
+            Some(ApiCredential::ServiceAccount(cred)) => cred.client_email().to_string(),
+            _ => "api-token".to_string(),
+        }
     }
 
     fn required_project(&self, command: &str) -> Result<String, GcloudError> {
@@ -172,7 +218,7 @@ impl ApiRunner {
         path: &str,
         body: Option<serde_json::Value>,
     ) -> Result<String, GcloudError> {
-        let token = self.required_token(command)?;
+        let token = self.required_token(command).await?;
         let url = format!("https://compute.googleapis.com/compute/v1{path}");
         let mut request = self
             .client
@@ -214,12 +260,13 @@ impl ApiRunner {
         let cmd = format!("gcloud {}", args.join(" "));
 
         if args.starts_with(&["auth", "print-access-token"]) {
-            return self.required_token(&cmd);
+            return self.required_token(&cmd).await;
         }
 
         if args.starts_with(&["auth", "list"]) {
-            self.required_token(&cmd)?;
-            return Ok("[{\"account\":\"api-token\",\"status\":\"ACTIVE\"}]".into());
+            self.required_token(&cmd).await?;
+            let account = self.account_name();
+            return Ok(format!("[{{\"account\":\"{account}\",\"status\":\"ACTIVE\"}}]"));
         }
 
         if args.len() >= 3
@@ -300,6 +347,10 @@ impl ApiRunner {
                     "boot": true,
                     "autoDelete": false,
                     "source": format!("projects/{project}/zones/{zone}/disks/{disk_name}")
+                }],
+                "networkInterfaces": [{
+                    "network": format!("projects/{project}/global/networks/default"),
+                    "accessConfigs": [{"type": "ONE_TO_ONE_NAT", "name": "External NAT"}]
                 }]
             });
 
@@ -426,7 +477,7 @@ impl ApiRunner {
         }
 
         if args.starts_with(&["compute", "config-ssh"]) {
-            self.required_token(&cmd)?;
+            self.required_token(&cmd).await?;
             return Ok("API mode: skipping gcloud config-ssh".into());
         }
 
@@ -463,10 +514,14 @@ impl GcloudRunner for ApiRunner {
 
 pub fn build_runner_from_preferences(preferences: &UserPreferences) -> Arc<dyn GcloudRunner> {
     if preferences.execution_mode == "api" {
-        Arc::new(ApiRunner::new(
-            preferences.project.clone(),
-            preferences.api_access_token.clone(),
-        )) as Arc<dyn GcloudRunner>
+        let runner = if let Some(ref key_path) = preferences.service_account_key_path {
+            ApiRunner::new_with_service_account(preferences.project.clone(), key_path)
+        } else if let Some(ref token) = preferences.api_access_token {
+            ApiRunner::new_with_token(preferences.project.clone(), token.clone())
+        } else {
+            ApiRunner::new(preferences.project.clone(), None)
+        };
+        Arc::new(runner) as Arc<dyn GcloudRunner>
     } else {
         Arc::new(CliRunner::new(
             preferences.project.clone(),

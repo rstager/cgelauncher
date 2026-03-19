@@ -1,4 +1,4 @@
-use crate::gcloud::executor::CliRunner;
+use crate::gcloud::executor::build_runner_from_preferences;
 use crate::models::config::DiskConfig;
 use crate::models::machine::ConfigPreset;
 use crate::models::UserPreferences;
@@ -27,16 +27,15 @@ pub async fn set_preferences(
 ) -> Result<UserPreferences, String> {
     // Rebuild the runner if project or credentials changed
     let mut prefs = state.preferences.lock().await;
-    let project_changed = prefs.project != preferences.project;
-    let cred_changed = prefs.service_account_key_path != preferences.service_account_key_path;
+    let runner_changed = prefs.project != preferences.project
+        || prefs.service_account_key_path != preferences.service_account_key_path
+        || prefs.execution_mode != preferences.execution_mode
+        || prefs.api_access_token != preferences.api_access_token;
     *prefs = preferences.clone();
     drop(prefs);
 
-    if project_changed || cred_changed {
-        let new_runner = Arc::new(CliRunner::new(
-            preferences.project.clone(),
-            preferences.service_account_key_path.clone(),
-        ));
+    if runner_changed {
+        let new_runner = build_runner_from_preferences(&preferences);
         state.set_runner(new_runner).await;
     }
 

@@ -10,6 +10,8 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   defaultGpuCount: 4,
   defaultSpot: true,
   serviceAccountKeyPath: null,
+  executionMode: 'gcloud',
+  apiAccessToken: null,
   customPresets: [],
   hiddenPresets: [],
   diskConfigs: {},

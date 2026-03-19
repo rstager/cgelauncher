@@ -78,7 +78,6 @@ pub fn build_create_instance_args(
         startup_script_path.to_string_lossy()
     ));
 
-    args.push("--quiet".into());
     args
 }
 

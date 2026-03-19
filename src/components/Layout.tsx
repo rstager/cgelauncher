@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import type {
   Disk,
   MachineConfig,
@@ -65,6 +65,7 @@ export default function Layout({
   const [logs, setLogs] = useState<GcloudCommandLogEntry[]>([]);
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const logsScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     void checkAuth().then(setAuthStatus).catch(() => {});
@@ -76,23 +77,23 @@ export default function Layout({
     selectedVmStatus?.status === 'Running' ||
     (!selectedVmStatus && selectedDiskData?.attachedTo != null);
 
-  const loadLogs = async () => {
-    setLogsLoading(true);
+  const loadLogs = async (initial = false) => {
+    if (initial) setLogsLoading(true);
     setLogsError(null);
     try {
       const entries = await getGcloudLogs();
-      setLogs(entries.slice().reverse());
+      setLogs(entries);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setLogsError(message);
     } finally {
-      setLogsLoading(false);
+      if (initial) setLogsLoading(false);
     }
   };
 
   const handleOpenLogs = () => {
     setLogsOpen(true);
-    void loadLogs();
+    void loadLogs(true);
   };
 
   useEffect(() => {
@@ -107,8 +108,13 @@ export default function Layout({
     return () => clearInterval(timer);
   }, [logsOpen]);
 
-  useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  useLayoutEffect(() => {
+    const container = logsScrollRef.current;
+    if (!container) return;
+    const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 8;
+    if (atBottom) {
+      container.scrollTop = container.scrollHeight;
+    }
   }, [logs]);
 
   return (
@@ -127,7 +133,7 @@ export default function Layout({
         />
         <label className="text-xs text-[var(--color-text-muted)]">Zone</label>
         <select
-          className="bg-[var(--color-bg-input)] border border-[var(--color-border-default)] text-[var(--color-text-secondary)] px-2 py-1 rounded text-[13px] min-w-[140px]"
+          className="select-field min-w-[140px]"
           value={preferences.zone}
           disabled
         >
@@ -225,7 +231,7 @@ export default function Layout({
                 Close
               </button>
             </div>
-            <div className="p-4 overflow-auto text-xs text-[var(--color-text-secondary)] space-y-3">
+            <div ref={logsScrollRef} className="p-4 overflow-auto text-xs text-[var(--color-text-secondary)] space-y-3">
               {logsLoading && <div>Loading logs...</div>}
               {logsError && <div className="text-[var(--color-accent-red)]">{logsError}</div>}
               {!logsLoading && !logsError && logs.length === 0 && (
