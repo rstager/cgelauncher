@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use crate::gcloud::service_account::ServiceAccountCredential;
 use crate::models::UserPreferences;
 use reqwest::{Client, Method, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -91,16 +90,11 @@ pub trait GcloudRunner: Send + Sync {
 /// Executes gcloud commands as real subprocesses.
 pub struct CliRunner {
     pub project: String,
-    /// Optional path to a service account JSON key file.
-    pub credential_file: Option<String>,
 }
 
 impl CliRunner {
-    pub fn new(project: String, credential_file: Option<String>) -> Self {
-        Self {
-            project,
-            credential_file,
-        }
+    pub fn new(project: String) -> Self {
+        Self { project }
     }
 
     /// Build the full argument list including --project and --format=json.
@@ -123,17 +117,13 @@ impl CliRunner {
     }
 }
 
-enum ApiCredential {
-    StaticToken(String),
-    ServiceAccount(ServiceAccountCredential),
-    /// Holds a load error to surface on first use rather than at construction.
-    LoadError(String),
-}
-
 /// Executes Google Compute API requests directly (without requiring gcloud installed).
 pub struct ApiRunner {
     pub project: String,
-    credential: Option<ApiCredential>,
+    /// Current access token (may be refreshed on 401).
+    access_token: tokio::sync::Mutex<Option<String>>,
+    /// Refresh token used to obtain a new access token when the current one expires.
+    refresh_token: Option<String>,
     client: Client,
 }
 
@@ -142,9 +132,10 @@ impl ApiRunner {
     pub fn new(project: String, access_token: Option<String>) -> Self {
         Self {
             project,
-            credential: access_token
-                .filter(|t| !t.trim().is_empty())
-                .map(ApiCredential::StaticToken),
+            access_token: tokio::sync::Mutex::new(
+                access_token.filter(|t| !t.trim().is_empty()),
+            ),
+            refresh_token: None,
             client: Client::new(),
         }
     }
@@ -152,47 +143,48 @@ impl ApiRunner {
     pub fn new_with_token(project: String, token: String) -> Self {
         Self {
             project,
-            credential: Some(ApiCredential::StaticToken(token)),
+            access_token: tokio::sync::Mutex::new(Some(token)),
+            refresh_token: None,
             client: Client::new(),
         }
     }
 
-    /// Loads a service account JSON key file. Returns a runner that fails lazily
-    /// with the load error on first use if the file is invalid.
-    pub fn new_with_service_account(project: String, key_path: &str) -> Self {
-        let credential = match ServiceAccountCredential::from_file(key_path) {
-            Ok(cred) => ApiCredential::ServiceAccount(cred),
-            Err(e) => ApiCredential::LoadError(e.message),
-        };
+    pub fn new_with_refresh(project: String, access_token: String, refresh_token: String) -> Self {
         Self {
             project,
-            credential: Some(credential),
+            access_token: tokio::sync::Mutex::new(Some(access_token)),
+            refresh_token: Some(refresh_token),
             client: Client::new(),
         }
     }
 
-    async fn required_token(&self, command: &str) -> Result<String, GcloudError> {
-        match &self.credential {
-            Some(ApiCredential::StaticToken(t)) => Ok(t.clone()),
-            Some(ApiCredential::ServiceAccount(cred)) => cred.fetch_token(&self.client).await,
-            Some(ApiCredential::LoadError(msg)) => Err(GcloudError {
-                message: msg.clone(),
-                command: command.into(),
-                exit_code: 1,
-            }),
-            None => Err(GcloudError {
-                message: "API mode requires a service account key file or access token".into(),
-                command: command.into(),
-                exit_code: 401,
-            }),
-        }
+    async fn current_token(&self, command: &str) -> Result<String, GcloudError> {
+        let guard = self.access_token.lock().await;
+        guard.clone().ok_or_else(|| GcloudError {
+            message: "API mode requires an access token".into(),
+            command: command.into(),
+            exit_code: 401,
+        })
     }
 
-    fn account_name(&self) -> String {
-        match &self.credential {
-            Some(ApiCredential::ServiceAccount(cred)) => cred.client_email().to_string(),
-            _ => "api-token".to_string(),
-        }
+    async fn refresh_and_get_token(&self, command: &str) -> Result<String, GcloudError> {
+        let refresh_token = self.refresh_token.as_deref().ok_or_else(|| GcloudError {
+            message: "Access token expired and no refresh token available — please sign in again".into(),
+            command: command.into(),
+            exit_code: 401,
+        })?;
+
+        let tokens = crate::oauth::flow::refresh_access_token(&self.client, refresh_token)
+            .await
+            .map_err(|e| GcloudError {
+                message: format!("Token refresh failed: {e}"),
+                command: command.into(),
+                exit_code: 401,
+            })?;
+
+        let mut guard = self.access_token.lock().await;
+        *guard = Some(tokens.access_token.clone());
+        Ok(tokens.access_token)
     }
 
     fn required_project(&self, command: &str) -> Result<String, GcloudError> {
@@ -218,7 +210,28 @@ impl ApiRunner {
         path: &str,
         body: Option<serde_json::Value>,
     ) -> Result<String, GcloudError> {
-        let token = self.required_token(command).await?;
+        let token = self.current_token(command).await?;
+        let result = self.do_request(method.clone(), command, path, body.clone(), &token).await;
+
+        // On 401, attempt a token refresh and retry once.
+        if let Err(ref e) = result {
+            if e.exit_code == 401 {
+                if let Ok(fresh_token) = self.refresh_and_get_token(command).await {
+                    return self.do_request(method, command, path, body, &fresh_token).await;
+                }
+            }
+        }
+        result
+    }
+
+    async fn do_request(
+        &self,
+        method: Method,
+        command: &str,
+        path: &str,
+        body: Option<serde_json::Value>,
+        token: &str,
+    ) -> Result<String, GcloudError> {
         let url = format!("https://compute.googleapis.com/compute/v1{path}");
         let mut request = self
             .client
@@ -260,13 +273,12 @@ impl ApiRunner {
         let cmd = format!("gcloud {}", args.join(" "));
 
         if args.starts_with(&["auth", "print-access-token"]) {
-            return self.required_token(&cmd).await;
+            return self.current_token(&cmd).await;
         }
 
         if args.starts_with(&["auth", "list"]) {
-            self.required_token(&cmd).await?;
-            let account = self.account_name();
-            return Ok(format!("[{{\"account\":\"{account}\",\"status\":\"ACTIVE\"}}]"));
+            self.current_token(&cmd).await?;
+            return Ok(r#"[{"account":"api-token","status":"ACTIVE"}]"#.into());
         }
 
         if args.len() >= 3
@@ -477,7 +489,7 @@ impl ApiRunner {
         }
 
         if args.starts_with(&["compute", "config-ssh"]) {
-            self.required_token(&cmd).await?;
+            self.current_token(&cmd).await?;
             return Ok("API mode: skipping gcloud config-ssh".into());
         }
 
@@ -514,19 +526,20 @@ impl GcloudRunner for ApiRunner {
 
 pub fn build_runner_from_preferences(preferences: &UserPreferences) -> Arc<dyn GcloudRunner> {
     if preferences.execution_mode == "api" {
-        let runner = if let Some(ref key_path) = preferences.service_account_key_path {
-            ApiRunner::new_with_service_account(preferences.project.clone(), key_path)
-        } else if let Some(ref token) = preferences.api_access_token {
-            ApiRunner::new_with_token(preferences.project.clone(), token.clone())
-        } else {
-            ApiRunner::new(preferences.project.clone(), None)
+        let runner = match (&preferences.api_access_token, &preferences.oauth_refresh_token) {
+            (Some(token), Some(refresh)) => ApiRunner::new_with_refresh(
+                preferences.project.clone(),
+                token.clone(),
+                refresh.clone(),
+            ),
+            (Some(token), None) => {
+                ApiRunner::new_with_token(preferences.project.clone(), token.clone())
+            }
+            _ => ApiRunner::new(preferences.project.clone(), None),
         };
         Arc::new(runner) as Arc<dyn GcloudRunner>
     } else {
-        Arc::new(CliRunner::new(
-            preferences.project.clone(),
-            preferences.service_account_key_path.clone(),
-        )) as Arc<dyn GcloudRunner>
+        Arc::new(CliRunner::new(preferences.project.clone())) as Arc<dyn GcloudRunner>
     }
 }
 
@@ -577,10 +590,6 @@ impl GcloudRunner for CliRunner {
 
         let mut command = Command::new(find_gcloud_path());
         command.args(&full_args);
-
-        if let Some(ref cred_path) = self.credential_file {
-            command.env("CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE", cred_path);
-        }
 
         let output = match command.output().await {
             Ok(output) => output,
@@ -698,7 +707,7 @@ mod tests {
 
     #[test]
     fn cli_runner_builds_args_with_project() {
-        let runner = CliRunner::new("my-proj".into(), None);
+        let runner = CliRunner::new("my-proj".into());
         let args = runner.build_args(&["compute", "disks", "list", "--zone=us-central1-a"]);
         assert!(args.contains(&"--project"));
         assert!(args.contains(&"my-proj"));
@@ -707,7 +716,7 @@ mod tests {
 
     #[test]
     fn cli_runner_skips_project_for_auth() {
-        let runner = CliRunner::new("my-proj".into(), None);
+        let runner = CliRunner::new("my-proj".into());
         let args = runner.build_args(&["auth", "print-access-token"]);
         assert!(!args.contains(&"--project"));
         // auth commands still get --format=json
@@ -716,7 +725,7 @@ mod tests {
 
     #[test]
     fn cli_runner_skips_project_when_empty() {
-        let runner = CliRunner::new(String::new(), None);
+        let runner = CliRunner::new(String::new());
         let args = runner.build_args(&["compute", "disks", "list"]);
         assert!(!args.contains(&"--project"));
     }

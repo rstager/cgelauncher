@@ -44,9 +44,6 @@ pub struct UserPreferences {
     #[serde(alias = "default_spot")]
     #[serde(default = "default_spot")]
     pub default_spot: bool,
-    #[serde(alias = "service_account_key_path")]
-    #[serde(default)]
-    pub service_account_key_path: Option<String>,
     #[serde(alias = "api_access_token")]
     #[serde(default)]
     pub api_access_token: Option<String>,
@@ -82,7 +79,6 @@ impl Default for UserPreferences {
             default_gpu_type: None,
             default_gpu_count: None,
             default_spot: true,
-            service_account_key_path: None,
             api_access_token: None,
             oauth_refresh_token: None,
             custom_presets: Vec::new(),
@@ -136,7 +132,6 @@ mod tests {
             default_gpu_type: Some("nvidia-tesla-v100".into()),
             default_gpu_count: Some(2),
             default_spot: false,
-            service_account_key_path: Some("/path/to/key.json".into()),
             api_access_token: Some("token-123".into()),
             oauth_refresh_token: None,
             custom_presets: Vec::new(),

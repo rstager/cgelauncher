@@ -9,7 +9,6 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   defaultGpuType: 'nvidia-tesla-t4',
   defaultGpuCount: 4,
   defaultSpot: true,
-  serviceAccountKeyPath: null,
   executionMode: 'gcloud',
   apiAccessToken: null,
   customPresets: [],
@@ -35,6 +34,15 @@ export function useConfig() {
     })();
   }, []);
 
+  const refresh = useCallback(async () => {
+    try {
+      const prefs = await getPreferences();
+      setPrefs(prefs);
+    } catch {
+      // Refresh failed; local state unchanged
+    }
+  }, []);
+
   const save = useCallback(async (updated: UserPreferences) => {
     try {
       const saved = await setPreferences(updated);
@@ -44,5 +52,5 @@ export function useConfig() {
     }
   }, []);
 
-  return { preferences, loading, save };
+  return { preferences, loading, save, refresh };
 }

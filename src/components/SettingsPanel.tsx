@@ -116,17 +116,19 @@ export default function SettingsPanel({ preferences, onSave, onClose }: Settings
 
         {executionMode === 'api' && (
           <div className="mb-4">
-            {authStatus?.authenticated && authStatus.method === 'oauth2' ? (
+            {authStatus?.authenticated ? (
               <div className="flex items-center gap-3">
                 <span className="text-xs text-[var(--color-text-success)]">
                   Signed in{authStatus.account ? `: ${authStatus.account}` : ''}
                 </span>
-                <button
-                  className="px-3 py-1 border border-[var(--color-border-default)] bg-transparent text-[var(--color-text-muted)] rounded text-xs cursor-pointer hover:border-[var(--color-accent-red)] hover:text-[var(--color-accent-red)]"
-                  onClick={() => void handleOAuthRevoke()}
-                >
-                  Sign out
-                </button>
+                {authStatus.method === 'oauth2' && (
+                  <button
+                    className="px-3 py-1 border border-[var(--color-border-default)] bg-transparent text-[var(--color-text-muted)] rounded text-xs cursor-pointer hover:border-[var(--color-accent-red)] hover:text-[var(--color-accent-red)]"
+                    onClick={() => void handleOAuthRevoke()}
+                  >
+                    Sign out
+                  </button>
+                )}
               </div>
             ) : (
               <button

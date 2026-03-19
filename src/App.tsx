@@ -15,15 +15,27 @@ const DEFAULT_CONFIG: MachineConfig = {
 };
 
 export default function App() {
-  const { preferences, save: savePreferences } = useConfig();
+  const { preferences, save: savePreferences, refresh: refreshPreferences } = useConfig();
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
 
-  useEffect(() => {
+  const refreshAuth = useCallback(() => {
     void checkAuth().then(setAuthStatus).catch(() => {});
-  }, []);
+    void refreshPreferences();
+  }, [refreshPreferences]);
+
+  useEffect(() => {
+    refreshAuth();
+  }, [refreshAuth]);
 
   const needsAuth = preferences.executionMode === 'api' && authStatus !== null && !authStatus.authenticated;
   const { disks, loading: disksLoading, refresh: refreshDisks } = useDisks(!needsAuth);
+
+  // When auth is gained, load disks automatically
+  useEffect(() => {
+    if (!needsAuth && authStatus !== null) {
+      void refreshDisks();
+    }
+  }, [needsAuth, authStatus, refreshDisks]);
   const { statuses: vmStatuses, upsertStatus } = useVmStatus();
   const [selectedDisk, setSelectedDisk] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -186,6 +198,7 @@ export default function App() {
       disks={disks}
       disksLoading={disksLoading}
       needsAuth={needsAuth}
+      onAuthChange={refreshAuth}
       selectedDisk={selectedDisk}
       vmStatuses={vmStatuses}
       config={config}

@@ -3,7 +3,6 @@ use crate::models::config::DiskConfig;
 use crate::models::machine::ConfigPreset;
 use crate::models::UserPreferences;
 use crate::state::AppState;
-use std::sync::Arc;
 use tauri::State;
 
 /// Resolve the config file path in the app data directory.
@@ -27,20 +26,30 @@ pub async fn set_preferences(
 ) -> Result<UserPreferences, String> {
     // Rebuild the runner if project or credentials changed
     let mut prefs = state.preferences.lock().await;
-    let runner_changed = prefs.project != preferences.project
-        || prefs.service_account_key_path != preferences.service_account_key_path
-        || prefs.execution_mode != preferences.execution_mode
-        || prefs.api_access_token != preferences.api_access_token;
-    *prefs = preferences.clone();
+
+    // Preserve OAuth tokens that the frontend doesn't track — the backend is the
+    // authoritative store for tokens obtained via start_oauth_login / token refresh.
+    let mut merged = preferences.clone();
+    if merged.api_access_token.is_none() {
+        merged.api_access_token = prefs.api_access_token.clone();
+    }
+    if merged.oauth_refresh_token.is_none() {
+        merged.oauth_refresh_token = prefs.oauth_refresh_token.clone();
+    }
+
+    let runner_changed = prefs.project != merged.project
+        || prefs.execution_mode != merged.execution_mode
+        || prefs.api_access_token != merged.api_access_token;
+    *prefs = merged.clone();
     drop(prefs);
 
     if runner_changed {
-        let new_runner = build_runner_from_preferences(&preferences);
+        let new_runner = build_runner_from_preferences(&merged);
         state.set_runner(new_runner).await;
     }
 
-    persist_preferences(&preferences)?;
-    Ok(preferences)
+    persist_preferences(&merged)?;
+    Ok(merged)
 }
 
 pub fn persist_preferences_pub(prefs: &UserPreferences) -> Result<(), String> {

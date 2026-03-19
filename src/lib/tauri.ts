@@ -47,10 +47,6 @@ export async function checkAuth(): Promise<AuthStatus> {
   return tauriInvoke<AuthStatus>('check_auth');
 }
 
-export async function setServiceAccount(keyPath: string): Promise<AuthStatus> {
-  return tauriInvoke<AuthStatus>('set_service_account', { keyPath });
-}
-
 export async function configureSsh(): Promise<{ sshHost: string; configPath: string }> {
   return tauriInvoke<{ sshHost: string; configPath: string }>('configure_ssh');
 }

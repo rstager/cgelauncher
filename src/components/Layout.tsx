@@ -36,6 +36,7 @@ interface LayoutProps {
   onSavePreferences: (prefs: UserPreferences) => void;
   onSavePreset: (preset: ConfigPreset) => void;
   onDeletePreset: (name: string) => void;
+  onAuthChange: () => void;
 }
 
 export default function Layout({
@@ -59,6 +60,7 @@ export default function Layout({
   onSavePreferences,
   onSavePreset,
   onDeletePreset,
+  onAuthChange,
 }: LayoutProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
@@ -143,7 +145,11 @@ export default function Layout({
         </select>
         {authStatus?.authenticated && (
           <span className="text-[11px] px-2 py-0.5 rounded-full bg-[var(--color-auth-bg)] text-[var(--color-text-success)]">
-            {authStatus.method === 'gcloud' ? 'gcloud authenticated' : `SA: ${authStatus.account}`}
+            {authStatus.method === 'gcloud'
+              ? 'gcloud authenticated'
+              : authStatus.method === 'oauth2'
+                ? 'signed in'
+                : `SA: ${authStatus.account}`}
           </span>
         )}
         <button
@@ -223,7 +229,7 @@ export default function Layout({
         <SettingsPanel
           preferences={preferences}
           onSave={onSavePreferences}
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => { setSettingsOpen(false); onAuthChange(); }}
         />
       )}
 

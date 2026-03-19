@@ -12,13 +12,35 @@ use std::sync::Arc;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let preferences = commands::config::load_preferences();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+
+    // Eagerly refresh the OAuth token before starting so the app has valid
+    // credentials from the first request, not after a background race.
+    let mut preferences = commands::config::load_preferences();
+    if let Some(ref refresh_token) = preferences.oauth_refresh_token.clone() {
+        let client = reqwest::Client::new();
+        match rt.block_on(oauth::flow::refresh_access_token(&client, refresh_token)) {
+            Ok(tokens) => {
+                preferences.api_access_token = Some(tokens.access_token);
+                let _ = commands::config::persist_preferences_pub(&preferences);
+            }
+            Err(e) => {
+                eprintln!("Warning: OAuth token refresh at startup failed: {e}");
+                // Refresh token is expired or revoked — clear credentials so the
+                // user is prompted to sign in again rather than getting silent 401s.
+                preferences.api_access_token = None;
+                preferences.oauth_refresh_token = None;
+                let _ = commands::config::persist_preferences_pub(&preferences);
+            }
+        }
+    }
+
     let runner = build_runner_from_preferences(&preferences);
     // Load cached pricing from disk (instant, no network)
     let initial_pricing = pricing_fetch::load_cache();
     let app_state = AppState::new(runner, preferences, initial_pricing);
 
-    // Refresh OAuth access token in background when it nears expiry
+    // Periodically refresh the OAuth access token (every 30 min).
     let oauth_state_bg = app_state.preferences.clone();
     let oauth_runner_bg = app_state.runner.clone();
     std::thread::spawn(move || {
@@ -29,32 +51,39 @@ pub fn run() {
 
                 let prefs = oauth_state_bg.lock().await;
                 let refresh_token = prefs.oauth_refresh_token.clone();
-                let access_token = prefs.api_access_token.clone();
+                let project = prefs.project.clone();
                 drop(prefs);
 
-                let Some(refresh_token) = refresh_token else { continue };
-                let Some(_access_token) = access_token else { continue };
+                if let Some(refresh_token) = refresh_token {
+                    let client = reqwest::Client::new();
+                    match oauth::flow::refresh_access_token(&client, &refresh_token).await {
+                        Ok(tokens) => {
+                            let mut prefs = oauth_state_bg.lock().await;
+                            prefs.api_access_token = Some(tokens.access_token.clone());
+                            let prefs_clone = prefs.clone();
+                            drop(prefs);
 
-                let client = reqwest::Client::new();
-                match oauth::flow::refresh_access_token(&client, &refresh_token).await {
-                    Ok(tokens) => {
-                        let mut prefs = oauth_state_bg.lock().await;
-                        prefs.api_access_token = Some(tokens.access_token.clone());
-                        let prefs_clone = prefs.clone();
-                        drop(prefs);
+                            let new_runner = Arc::new(ApiRunner::new_with_refresh(
+                                project,
+                                tokens.access_token,
+                                refresh_token,
+                            ));
+                            let mut runner_guard = oauth_runner_bg.lock().await;
+                            *runner_guard = new_runner;
+                            drop(runner_guard);
 
-                        let new_runner = Arc::new(ApiRunner::new_with_token(
-                            prefs_clone.project.clone(),
-                            tokens.access_token,
-                        ));
-                        let mut runner_guard = oauth_runner_bg.lock().await;
-                        *runner_guard = new_runner;
-                        drop(runner_guard);
-
-                        let _ = commands::config::persist_preferences_pub(&prefs_clone);
-                    }
-                    Err(e) => {
-                        eprintln!("Warning: OAuth token refresh failed: {e}");
+                            let _ = commands::config::persist_preferences_pub(&prefs_clone);
+                        }
+                        Err(e) => {
+                            eprintln!("Warning: OAuth token refresh failed: {e}");
+                            // Refresh token expired or revoked — clear credentials.
+                            let mut prefs = oauth_state_bg.lock().await;
+                            prefs.api_access_token = None;
+                            prefs.oauth_refresh_token = None;
+                            let prefs_clone = prefs.clone();
+                            drop(prefs);
+                            let _ = commands::config::persist_preferences_pub(&prefs_clone);
+                        }
                     }
                 }
             }
@@ -90,7 +119,6 @@ pub fn run() {
             commands::vm::stop_vm,
             commands::pricing::estimate_pricing,
             commands::auth::check_auth,
-            commands::auth::set_service_account,
             commands::auth::start_oauth_login,
             commands::auth::revoke_oauth,
             commands::ssh::configure_ssh,

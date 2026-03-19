@@ -1,4 +1,4 @@
-use crate::gcloud::executor::{ApiRunner, CliRunner};
+use crate::gcloud::executor::ApiRunner;
 use crate::gcloud::executor::build_runner_from_preferences;
 use crate::models::config::AuthStatus;
 use crate::oauth::{callback_server, flow};
@@ -13,41 +13,20 @@ pub async fn check_auth(state: State<'_, AppState>) -> Result<AuthStatus, String
     let runner = runner_guard.clone();
     drop(runner_guard);
 
-    crate::gcloud::auth::check_auth(&*runner)
+    let mut status = crate::gcloud::auth::check_auth(&*runner)
         .await
-        .map_err(|e| e.to_string())
-}
+        .map_err(|e| e.to_string())?;
 
-#[tauri::command]
-pub async fn set_service_account(
-    state: State<'_, AppState>,
-    key_path: String,
-) -> Result<AuthStatus, String> {
-    // Validate the key file exists
-    if !std::path::Path::new(&key_path).exists() {
-        return Err(format!("Service account key file not found: {key_path}"));
+    // Annotate the auth method based on stored preferences so the frontend
+    // can distinguish gcloud CLI auth from OAuth API auth.
+    if status.authenticated {
+        let prefs = state.preferences.lock().await;
+        if prefs.execution_mode == "api" {
+            status.method = "oauth2".into();
+        }
     }
 
-    let prefs = state.preferences.lock().await;
-    let project = prefs.project.clone();
-    drop(prefs);
-
-    let new_runner = Arc::new(CliRunner::new(project, Some(key_path.clone())));
-    state.set_runner(new_runner.clone()).await;
-
-    // Update preferences with the key path
-    let mut prefs = state.preferences.lock().await;
-    prefs.service_account_key_path = Some(key_path);
-    drop(prefs);
-
-    // Verify the new credentials work
-    crate::gcloud::auth::check_auth(&*new_runner)
-        .await
-        .map(|mut status| {
-            status.method = "service-account".into();
-            status
-        })
-        .map_err(|e| e.to_string())
+    Ok(status)
 }
 
 /// Initiates the OAuth2 browser flow. Opens the system browser to Google's
@@ -56,6 +35,7 @@ pub async fn set_service_account(
 #[tauri::command]
 pub async fn start_oauth_login(
     state: State<'_, AppState>,
+    #[cfg_attr(target_os = "linux", allow(unused_variables))]
     app: tauri::AppHandle,
 ) -> Result<AuthStatus, String> {
     let pkce = flow::PkceChallenge::generate();
@@ -105,10 +85,14 @@ pub async fn start_oauth_login(
     let prefs_clone = prefs.clone();
     drop(prefs);
 
-    let new_runner = Arc::new(ApiRunner::new_with_token(
-        prefs_clone.project.clone(),
-        tokens.access_token,
-    ));
+    let new_runner = Arc::new(match &prefs_clone.oauth_refresh_token {
+        Some(rt) => ApiRunner::new_with_refresh(
+            prefs_clone.project.clone(),
+            tokens.access_token,
+            rt.clone(),
+        ),
+        None => ApiRunner::new_with_token(prefs_clone.project.clone(), tokens.access_token),
+    });
     state.set_runner(new_runner).await;
 
     crate::commands::config::persist_preferences_pub(&prefs_clone)?;

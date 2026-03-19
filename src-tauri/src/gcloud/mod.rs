@@ -5,5 +5,4 @@ pub mod executor;
 pub mod instance;
 pub mod pricing;
 pub mod pricing_fetch;
-pub mod service_account;
 pub mod ssh;

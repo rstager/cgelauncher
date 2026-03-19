@@ -54,7 +54,6 @@ export interface UserPreferences {
   defaultGpuType: string | null;
   defaultGpuCount: number | null;
   defaultSpot: boolean;
-  serviceAccountKeyPath: string | null;
   executionMode: 'gcloud' | 'api';
   apiAccessToken: string | null;
   customPresets: ConfigPreset[];
@@ -64,7 +63,7 @@ export interface UserPreferences {
 
 export interface AuthStatus {
   authenticated: boolean;
-  method: 'gcloud' | 'service-account' | 'oauth2' | string;
+  method: 'gcloud' | 'oauth2' | string;
   account: string | null;
 }
 
