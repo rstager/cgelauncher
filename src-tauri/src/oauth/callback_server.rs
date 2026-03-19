@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 
-const SUCCESS_HTML: &str = r#"<!DOCTYPE html><html><body style="font-family:sans-serif;text-align:center;padding:60px">
-<h2>✓ Signed in successfully</h2><p>You can close this tab and return to GCE Launcher.</p>
+const SUCCESS_HTML: &str = r#"<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;text-align:center;padding:60px">
+<h2>&#x2713; Signed in successfully</h2><p>You can close this tab and return to GCE Launcher.</p>
 </body></html>"#;
 
 const ERROR_HTML: &str = r#"<!DOCTYPE html><html><body style="font-family:sans-serif;text-align:center;padding:60px">

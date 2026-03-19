@@ -5,8 +5,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const CLIENT_ID: &str =
-    env!("OAUTH_CLIENT_ID");
+const CLIENT_ID: &str = env!("OAUTH_CLIENT_ID");
 const CLIENT_SECRET: &str = env!("OAUTH_CLIENT_SECRET");
 const REDIRECT_URI: &str = "http://localhost:7887/callback";
 const SCOPE: &str = "https://www.googleapis.com/auth/compute";

@@ -2,3 +2,4 @@ node_modules
 .cargo
 dist
 src-tauri/target
+dev.env
