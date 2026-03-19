@@ -1,6 +1,6 @@
-import { useState, useCallback, useMemo } from 'react';
-import type { MachineConfig, ConfigPreset, UserPreferences } from './lib/types.ts';
-import { startVm, stopVm, saveDiskConfig, saveCustomPreset, deleteCustomPreset } from './lib/tauri.ts';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import type { MachineConfig, ConfigPreset, UserPreferences, AuthStatus } from './lib/types.ts';
+import { startVm, stopVm, saveDiskConfig, saveCustomPreset, deleteCustomPreset, checkAuth } from './lib/tauri.ts';
 import { useDisks } from './hooks/useDisks.ts';
 import { useVmStatus } from './hooks/useVmStatus.ts';
 import { usePricing } from './hooks/usePricing.ts';
@@ -15,9 +15,16 @@ const DEFAULT_CONFIG: MachineConfig = {
 };
 
 export default function App() {
-  const { disks, loading: disksLoading, refresh: refreshDisks } = useDisks();
-  const { statuses: vmStatuses, upsertStatus } = useVmStatus();
   const { preferences, save: savePreferences } = useConfig();
+  const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
+
+  useEffect(() => {
+    void checkAuth().then(setAuthStatus).catch(() => {});
+  }, []);
+
+  const needsAuth = preferences.executionMode === 'api' && authStatus !== null && !authStatus.authenticated;
+  const { disks, loading: disksLoading, refresh: refreshDisks } = useDisks(!needsAuth);
+  const { statuses: vmStatuses, upsertStatus } = useVmStatus();
   const [selectedDisk, setSelectedDisk] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -178,6 +185,7 @@ export default function App() {
     <Layout
       disks={disks}
       disksLoading={disksLoading}
+      needsAuth={needsAuth}
       selectedDisk={selectedDisk}
       vmStatuses={vmStatuses}
       config={config}

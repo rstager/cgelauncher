@@ -18,6 +18,7 @@ import SettingsPanel from './SettingsPanel.tsx';
 interface LayoutProps {
   disks: Disk[];
   disksLoading: boolean;
+  needsAuth: boolean;
   selectedDisk: string | null;
   vmStatuses: Map<string, VmStatusUpdate>;
   config: MachineConfig;
@@ -40,6 +41,7 @@ interface LayoutProps {
 export default function Layout({
   disks,
   disksLoading,
+  needsAuth,
   selectedDisk,
   vmStatuses,
   config,
@@ -160,6 +162,17 @@ export default function Layout({
 
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
+        {needsAuth ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 text-[var(--color-text-muted)]">
+            <p className="text-sm">Sign in to access your GCP disks.</p>
+            <button
+              className="btn-action btn-start text-sm px-6 py-2"
+              onClick={() => setSettingsOpen(true)}
+            >
+              Open Settings to Sign In
+            </button>
+          </div>
+        ) : (
         <DiskList
           disks={disks}
           selectedDisk={selectedDisk}
@@ -168,7 +181,8 @@ export default function Layout({
           onSelectDisk={onSelectDisk}
           onRefresh={onRefreshDisks}
         />
-        {selectedDiskData ? (
+        )}
+        {!needsAuth && (selectedDiskData ? (
           <ConfigPanel
             disk={selectedDiskData}
             vmStatus={selectedVmStatus}
@@ -187,7 +201,7 @@ export default function Layout({
           <div className="flex-1 flex items-center justify-center text-[var(--color-text-muted)]">
             Select a disk to configure
           </div>
-        )}
+        ))}
       </div>
 
       {actionError && (

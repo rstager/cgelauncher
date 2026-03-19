@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Disk } from '../lib/types.ts';
 import { listDisks } from '../lib/tauri.ts';
 
-export function useDisks() {
+export function useDisks(enabled = true) {
   const [disks, setDisks] = useState<Disk[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,8 +21,12 @@ export function useDisks() {
   }, []);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (enabled) {
+      void refresh();
+    } else {
+      setLoading(false);
+    }
+  }, [refresh, enabled]);
 
   return { disks, loading, error, refresh };
 }
