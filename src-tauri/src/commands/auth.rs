@@ -65,42 +65,24 @@ pub async fn start_oauth_login(
     // Bind the callback port BEFORE opening the browser to avoid race conditions.
     let listener = callback_server::bind_callback_listener().await?;
 
-    eprintln!("OAuth URL: {auth_url}");
-
-    // Open the system browser. Strategy varies by platform/environment:
-    // - WSL (cargo tauri dev on Linux): shell.open has no browser; use powershell.exe interop
-    // - Native Windows build: tauri shell.open works via ShellExecute
-    // - macOS: tauri shell.open works, or fall back to `open`
-    let shell_ok = tauri_plugin_shell::ShellExt::shell(&app)
-        .open(&auth_url, None)
-        .is_ok();
-
-    if !shell_ok {
-        #[cfg(target_os = "windows")]
-        {
-            let _ = tokio::process::Command::new("cmd.exe")
-                .args(["/c", "start", "", &auth_url])
-                .spawn();
-        }
-        #[cfg(target_os = "macos")]
-        {
-            let _ = tokio::process::Command::new("open")
+    // Open the system browser. On Linux (WSL dev), always use powershell.exe
+    // interop since shell.open targets the Linux env which has no browser.
+    // On Windows and macOS, tauri shell.open works directly.
+    #[cfg(target_os = "linux")]
+    {
+        let ps_ok = tokio::process::Command::new("powershell.exe")
+            .args(["-Command", &format!("Start-Process '{auth_url}'")])
+            .spawn()
+            .is_ok();
+        if !ps_ok {
+            let _ = tokio::process::Command::new("xdg-open")
                 .arg(&auth_url)
                 .spawn();
         }
-        #[cfg(target_os = "linux")]
-        {
-            // WSL: try powershell.exe interop, then xdg-open
-            let ps_ok = tokio::process::Command::new("powershell.exe")
-                .args(["-Command", &format!("Start-Process '{auth_url}'")])
-                .spawn()
-                .is_ok();
-            if !ps_ok {
-                let _ = tokio::process::Command::new("xdg-open")
-                    .arg(&auth_url)
-                    .spawn();
-            }
-        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = tauri_plugin_shell::ShellExt::shell(&app).open(&auth_url, None);
     }
 
     // Wait for the redirect on localhost:7887 (2 minute timeout)
