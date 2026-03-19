@@ -2,9 +2,10 @@ pub mod commands;
 pub mod gcloud;
 pub mod models;
 pub mod monitor;
+pub mod oauth;
 pub mod state;
 
-use gcloud::executor::build_runner_from_preferences;
+use gcloud::executor::{build_runner_from_preferences, ApiRunner};
 use gcloud::pricing_fetch;
 use state::AppState;
 use std::sync::Arc;
@@ -16,6 +17,49 @@ pub fn run() {
     // Load cached pricing from disk (instant, no network)
     let initial_pricing = pricing_fetch::load_cache();
     let app_state = AppState::new(runner, preferences, initial_pricing);
+
+    // Refresh OAuth access token in background when it nears expiry
+    let oauth_state_bg = app_state.preferences.clone();
+    let oauth_runner_bg = app_state.runner.clone();
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(30 * 60)).await;
+
+                let prefs = oauth_state_bg.lock().await;
+                let refresh_token = prefs.oauth_refresh_token.clone();
+                let access_token = prefs.api_access_token.clone();
+                drop(prefs);
+
+                let Some(refresh_token) = refresh_token else { continue };
+                let Some(_access_token) = access_token else { continue };
+
+                let client = reqwest::Client::new();
+                match oauth::flow::refresh_access_token(&client, &refresh_token).await {
+                    Ok(tokens) => {
+                        let mut prefs = oauth_state_bg.lock().await;
+                        prefs.api_access_token = Some(tokens.access_token.clone());
+                        let prefs_clone = prefs.clone();
+                        drop(prefs);
+
+                        let new_runner = Arc::new(ApiRunner::new_with_token(
+                            prefs_clone.project.clone(),
+                            tokens.access_token,
+                        ));
+                        let mut runner_guard = oauth_runner_bg.lock().await;
+                        *runner_guard = new_runner;
+                        drop(runner_guard);
+
+                        let _ = commands::config::persist_preferences_pub(&prefs_clone);
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: OAuth token refresh failed: {e}");
+                    }
+                }
+            }
+        });
+    });
 
     // Refresh pricing in background (non-blocking)
     let pricing_cache_bg = app_state.pricing_cache.clone();
@@ -47,6 +91,8 @@ pub fn run() {
             commands::pricing::estimate_pricing,
             commands::auth::check_auth,
             commands::auth::set_service_account,
+            commands::auth::start_oauth_login,
+            commands::auth::revoke_oauth,
             commands::ssh::configure_ssh,
             commands::config::get_preferences,
             commands::config::set_preferences,

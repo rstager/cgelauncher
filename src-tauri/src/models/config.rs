@@ -51,6 +51,8 @@ pub struct UserPreferences {
     #[serde(default)]
     pub api_access_token: Option<String>,
     #[serde(default)]
+    pub oauth_refresh_token: Option<String>,
+    #[serde(default)]
     pub custom_presets: Vec<ConfigPreset>,
     #[serde(default)]
     pub hidden_presets: Vec<String>,
@@ -82,6 +84,7 @@ impl Default for UserPreferences {
             default_spot: true,
             service_account_key_path: None,
             api_access_token: None,
+            oauth_refresh_token: None,
             custom_presets: Vec::new(),
             hidden_presets: Vec::new(),
             disk_configs: HashMap::new(),
@@ -135,6 +138,7 @@ mod tests {
             default_spot: false,
             service_account_key_path: Some("/path/to/key.json".into()),
             api_access_token: Some("token-123".into()),
+            oauth_refresh_token: None,
             custom_presets: Vec::new(),
             hidden_presets: Vec::new(),
             disk_configs: HashMap::new(),

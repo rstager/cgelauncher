@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { UserPreferences, AuthStatus } from '../lib/types.ts';
-import { checkAuth, setServiceAccount } from '../lib/tauri.ts';
+import { checkAuth, startOAuthLogin, revokeOauth } from '../lib/tauri.ts';
 
 const ZONES = [
   'us-central1-a',
@@ -23,10 +23,10 @@ interface SettingsPanelProps {
 export default function SettingsPanel({ preferences, onSave, onClose }: SettingsPanelProps) {
   const [project, setProject] = useState(preferences.project);
   const [zone, setZone] = useState(preferences.zone);
-  const [keyPath, setKeyPath] = useState(preferences.serviceAccountKeyPath ?? '');
   const [executionMode, setExecutionMode] = useState<'gcloud' | 'api'>(preferences.executionMode ?? 'gcloud');
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [oauthLoading, setOauthLoading] = useState(false);
 
   useEffect(() => {
     void checkAuth().then(setAuthStatus).catch(() => {});
@@ -37,18 +37,29 @@ export default function SettingsPanel({ preferences, onSave, onClose }: Settings
       ...preferences,
       project,
       zone,
-      serviceAccountKeyPath: keyPath || null,
       executionMode,
     });
     onClose();
   }
 
-  async function handleSetServiceAccount() {
-    if (!keyPath) return;
+  async function handleOAuthLogin() {
+    setOauthLoading(true);
     setAuthError(null);
     try {
-      const status = await setServiceAccount(keyPath);
+      const status = await startOAuthLogin();
       setAuthStatus(status);
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setOauthLoading(false);
+    }
+  }
+
+  async function handleOAuthRevoke() {
+    setAuthError(null);
+    try {
+      await revokeOauth();
+      setAuthStatus({ authenticated: false, method: '', account: null });
     } catch (err) {
       setAuthError(err instanceof Error ? err.message : String(err));
     }
@@ -92,45 +103,45 @@ export default function SettingsPanel({ preferences, onSave, onClose }: Settings
         </div>
 
         <div className="mb-4">
-          <label className="block text-[13px] text-[var(--color-text-muted)] mb-1">Execution Mode</label>
+          <label className="block text-[13px] text-[var(--color-text-muted)] mb-1">Authentication</label>
           <select
             className="select-field w-full"
             value={executionMode}
             onChange={(e) => setExecutionMode(e.target.value as 'gcloud' | 'api')}
           >
             <option value="gcloud">gcloud CLI</option>
-            <option value="api">Direct API (no gcloud required)</option>
+            <option value="api">Google Sign-In (no gcloud required)</option>
           </select>
         </div>
 
-        <div className="mb-4">
-          <label className="block text-[13px] text-[var(--color-text-muted)] mb-1">
-            Service Account Key Path
-          </label>
-          <div className="flex gap-2">
-            <input
-              className="input-field flex-1"
-              type="text"
-              value={keyPath}
-              onChange={(e) => setKeyPath(e.target.value)}
-              placeholder="/path/to/service-account.json"
-            />
-            <button
-              className="btn-action btn-start text-sm px-4 py-1.5"
-              onClick={() => void handleSetServiceAccount()}
-            >
-              Apply
-            </button>
+        {executionMode === 'api' && (
+          <div className="mb-4">
+            {authStatus?.authenticated && authStatus.method === 'oauth2' ? (
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-[var(--color-text-success)]">
+                  Signed in{authStatus.account ? `: ${authStatus.account}` : ''}
+                </span>
+                <button
+                  className="px-3 py-1 border border-[var(--color-border-default)] bg-transparent text-[var(--color-text-muted)] rounded text-xs cursor-pointer hover:border-[var(--color-accent-red)] hover:text-[var(--color-accent-red)]"
+                  onClick={() => void handleOAuthRevoke()}
+                >
+                  Sign out
+                </button>
+              </div>
+            ) : (
+              <button
+                className="btn-action btn-start text-sm px-4 py-1.5 disabled:opacity-50"
+                onClick={() => void handleOAuthLogin()}
+                disabled={oauthLoading}
+              >
+                {oauthLoading ? 'Waiting for browser...' : 'Sign in with Google'}
+              </button>
+            )}
+            {authError && (
+              <div className="text-xs text-[var(--color-accent-red)] mt-2">{authError}</div>
+            )}
           </div>
-          {authError && (
-            <div className="text-xs text-[var(--color-accent-red)] mt-1">{authError}</div>
-          )}
-          <div className="text-[11px] text-[var(--color-text-muted)] mt-1">
-            {executionMode === 'api'
-              ? 'To create a key: Google Cloud Console → IAM → Service Accounts → select account → Keys → Add Key → JSON'
-              : 'Optional. Leave blank to use gcloud default credentials.'}
-          </div>
-        </div>
+        )}
 
         <div className="mb-5">
           <label className="block text-[13px] text-[var(--color-text-muted)] mb-1">Auth Status</label>

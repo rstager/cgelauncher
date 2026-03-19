@@ -307,13 +307,16 @@ name = "cgelauncher"
 version = "0.1.1"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "dirs",
  "jsonwebtoken",
+ "rand 0.8.5",
  "reqwest 0.12.28",
  "scraper",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-shell",

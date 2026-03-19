@@ -82,3 +82,11 @@ export async function deleteCustomPreset(name: string): Promise<ConfigPreset[]> 
 export async function getGcloudLogs(): Promise<GcloudCommandLogEntry[]> {
   return tauriInvoke<GcloudCommandLogEntry[]>('get_gcloud_logs');
 }
+
+export async function startOAuthLogin(): Promise<AuthStatus> {
+  return tauriInvoke<AuthStatus>('start_oauth_login');
+}
+
+export async function revokeOauth(): Promise<void> {
+  return tauriInvoke<void>('revoke_oauth');
+}

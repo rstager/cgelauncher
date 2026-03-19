@@ -64,7 +64,7 @@ export interface UserPreferences {
 
 export interface AuthStatus {
   authenticated: boolean;
-  method: 'gcloud' | 'service-account';
+  method: 'gcloud' | 'service-account' | 'oauth2' | string;
   account: string | null;
 }
 

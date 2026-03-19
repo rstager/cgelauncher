@@ -43,6 +43,10 @@ pub async fn set_preferences(
     Ok(preferences)
 }
 
+pub fn persist_preferences_pub(prefs: &UserPreferences) -> Result<(), String> {
+    persist_preferences(prefs)
+}
+
 fn persist_preferences(prefs: &UserPreferences) -> Result<(), String> {
     let path = config_path();
     if let Some(parent) = path.parent() {

@@ -16,6 +16,9 @@ scraper = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 tempfile = "3"
 jsonwebtoken = "9"
+rand = "0.8"
+sha2 = "0.10"
+base64 = "0.22"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
