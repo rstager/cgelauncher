@@ -3,9 +3,10 @@ import type { VmStatusUpdate } from '../lib/types.ts';
 interface ResourceSummaryProps {
   vmStatus: VmStatusUpdate;
   costPerHour: number | null;
+  spot: boolean;
 }
 
-export default function ResourceSummary({ vmStatus, costPerHour }: ResourceSummaryProps) {
+export default function ResourceSummary({ vmStatus, costPerHour, spot }: ResourceSummaryProps) {
   const chips: { label: string; value: string }[] = [];
 
   if (vmStatus.machineType) {
@@ -25,7 +26,7 @@ export default function ResourceSummary({ vmStatus, costPerHour }: ResourceSumma
     chips.push({ label: 'GPU', value: `${vmStatus.gpuCount}x ${gpuShort}` });
   }
 
-  chips.push({ label: 'Provisioning', value: 'Spot' });
+  chips.push({ label: 'Provisioning', value: spot ? 'Spot' : 'On-Demand' });
 
   if (costPerHour !== null) {
     chips.push({ label: 'Cost', value: `$${costPerHour.toFixed(2)}/hr` });

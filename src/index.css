@@ -91,6 +91,15 @@
   border-left: 3px solid var(--color-border-active);
 }
 
+.disk-item-delete {
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.disk-item:hover .disk-item-delete {
+  opacity: 1;
+}
+
 /* Preset card styles */
 .preset-card {
   background: var(--color-bg-panel);
@@ -182,6 +191,17 @@
 
 .btn-stop:hover:not(:disabled) {
   background: var(--color-accent-red-hover);
+}
+
+.btn-ssh {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-default);
+}
+
+.btn-ssh:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
 }
 
 .btn-action:disabled {

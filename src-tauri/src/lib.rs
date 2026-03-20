@@ -115,6 +115,9 @@ pub fn run() {
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::disk::list_disks,
+            commands::disk::create_disk,
+            commands::disk::delete_disk,
+            commands::disk::list_images,
             commands::vm::start_vm,
             commands::vm::stop_vm,
             commands::pricing::estimate_pricing,
@@ -122,6 +125,7 @@ pub fn run() {
             commands::auth::start_oauth_login,
             commands::auth::revoke_oauth,
             commands::ssh::configure_ssh,
+            commands::ssh::launch_ssh_terminal,
             commands::config::get_preferences,
             commands::config::set_preferences,
             commands::config::save_disk_config,

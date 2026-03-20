@@ -97,6 +97,7 @@ pub async fn start_vm(
         gpu_type,
         gpu_count,
         memory_gb,
+        external_ip: None,
     })
 }
 
@@ -109,9 +110,6 @@ pub async fn stop_vm(
     let zone = prefs.zone.clone();
     drop(prefs);
 
-    // Cancel the monitor before deleting
-    state.cancel_monitor(&instance_name).await;
-
     let runner_guard = state.runner.lock().await;
     let runner = runner_guard.clone();
     drop(runner_guard);
@@ -120,5 +118,7 @@ pub async fn stop_vm(
         .await
         .map_err(|e| e.to_string())?;
 
+    // Leave the monitor running — it will poll until the instance is gone and
+    // emit NotFound, which is what drives the frontend back to the stopped state.
     Ok(true)
 }

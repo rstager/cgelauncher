@@ -85,6 +85,8 @@ impl std::error::Error for GcloudError {}
 #[async_trait]
 pub trait GcloudRunner: Send + Sync {
     async fn run(&self, args: &[&str]) -> Result<String, GcloudError>;
+    /// Returns true when backed by the gcloud CLI (not the REST API).
+    fn is_cli(&self) -> bool;
 }
 
 /// Executes gcloud commands as real subprocesses.
@@ -320,6 +322,64 @@ impl ApiRunner {
 
         if args.len() >= 4
             && args[0] == "compute"
+            && args[1] == "disks"
+            && args[2] == "create"
+        {
+            let project = self.required_project(&cmd)?;
+            let zone = Self::get_flag_value(args, "--zone=").ok_or_else(|| GcloudError {
+                message: "missing --zone flag".into(),
+                command: cmd.clone(),
+                exit_code: 400,
+            })?;
+            let disk_name = args[3].to_string();
+            let size_gb: u64 = Self::get_flag_value(args, "--size=")
+                .and_then(|s| s.trim_end_matches("GB").parse().ok())
+                .unwrap_or(100);
+            let disk_type = Self::get_flag_value(args, "--type=")
+                .unwrap_or_else(|| "pd-balanced".to_string());
+            let source_image = Self::get_flag_value(args, "--image=");
+            let mut body = json!({
+                "name": disk_name,
+                "sizeGb": size_gb.to_string(),
+                "type": format!("zones/{zone}/diskTypes/{disk_type}")
+            });
+            if let Some(image) = source_image {
+                body["sourceImage"] = serde_json::Value::String(image);
+            }
+            return self
+                .request(
+                    Method::POST,
+                    &cmd,
+                    &format!("/projects/{project}/zones/{zone}/disks"),
+                    Some(body),
+                )
+                .await;
+        }
+
+        if args.len() >= 4
+            && args[0] == "compute"
+            && args[1] == "disks"
+            && args[2] == "delete"
+        {
+            let project = self.required_project(&cmd)?;
+            let zone = Self::get_flag_value(args, "--zone=").ok_or_else(|| GcloudError {
+                message: "missing --zone flag".into(),
+                command: cmd.clone(),
+                exit_code: 400,
+            })?;
+            let disk_name = args[3];
+            return self
+                .request(
+                    Method::DELETE,
+                    &cmd,
+                    &format!("/projects/{project}/zones/{zone}/disks/{disk_name}"),
+                    None,
+                )
+                .await;
+        }
+
+        if args.len() >= 4
+            && args[0] == "compute"
             && args[1] == "instances"
             && args[2] == "create"
         {
@@ -488,9 +548,39 @@ impl ApiRunner {
             return result;
         }
 
-        if args.starts_with(&["compute", "config-ssh"]) {
-            self.current_token(&cmd).await?;
-            return Ok("API mode: skipping gcloud config-ssh".into());
+        // compute images list --project={image-project} [--filter=...]
+        if args.len() >= 3
+            && args[0] == "compute"
+            && args[1] == "images"
+            && args[2] == "list"
+        {
+            let image_project = Self::get_flag_value(args, "--project=").ok_or_else(|| GcloudError {
+                message: "missing --project flag for images list".into(),
+                command: cmd.clone(),
+                exit_code: 400,
+            })?;
+            let filter = Self::get_flag_value(args, "--filter=");
+            let mut path = format!("/projects/{image_project}/global/images");
+            if let Some(f) = filter {
+                // GCP filter syntax uses `name:ubuntu-*` — only encode spaces, leave : and * intact
+                let encoded = f.replace(' ', "%20");
+                path = format!("{path}?filter={encoded}");
+            }
+            let raw = self.request(Method::GET, &cmd, &path, None).await?;
+            let value: serde_json::Value = serde_json::from_str(&raw).map_err(|e| GcloudError {
+                message: format!("Failed to parse images response: {e}"),
+                command: cmd,
+                exit_code: -1,
+            })?;
+            let items = value
+                .get("items")
+                .cloned()
+                .unwrap_or_else(|| serde_json::Value::Array(vec![]));
+            return serde_json::to_string(&items).map_err(|e| GcloudError {
+                message: format!("Failed to encode images list: {e}"),
+                command: "compute images list".into(),
+                exit_code: -1,
+            });
         }
 
         Err(GcloudError {
@@ -521,6 +611,10 @@ impl GcloudRunner for ApiRunner {
             }),
         }
         result
+    }
+
+    fn is_cli(&self) -> bool {
+        false
     }
 }
 
@@ -633,6 +727,10 @@ impl GcloudRunner for CliRunner {
             })
         }
     }
+
+    fn is_cli(&self) -> bool {
+        true
+    }
 }
 
 /// Returns canned responses for testing, keyed by command prefix.
@@ -698,6 +796,10 @@ impl GcloudRunner for FakeRunner {
             command: cmd,
             exit_code: -1,
         })
+    }
+
+    fn is_cli(&self) -> bool {
+        false
     }
 }
 

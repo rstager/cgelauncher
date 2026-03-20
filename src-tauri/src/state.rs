@@ -43,6 +43,12 @@ impl AppState {
         }
     }
 
+    /// Returns true if a monitor is already running for the given instance.
+    pub async fn has_monitor(&self, instance_name: &str) -> bool {
+        let monitors = self.monitors.lock().await;
+        monitors.contains_key(instance_name)
+    }
+
     /// Register a monitor handle for an instance.
     pub async fn register_monitor(&self, instance_name: String, handle: JoinHandle<()>) {
         let mut monitors = self.monitors.lock().await;

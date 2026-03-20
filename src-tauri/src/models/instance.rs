@@ -32,6 +32,7 @@ pub struct VmStatusUpdate {
     pub gpu_type: Option<String>,
     pub gpu_count: Option<u32>,
     pub memory_gb: Option<f64>,
+    pub external_ip: Option<String>,
 }
 
 #[cfg(test)]
@@ -78,6 +79,7 @@ mod tests {
             gpu_type: Some("nvidia-tesla-t4".into()),
             gpu_count: Some(4),
             memory_gb: Some(30.0),
+            external_ip: Some("1.2.3.4".into()),
         };
         let json = serde_json::to_string(&update).unwrap();
         assert!(json.contains("Running"));

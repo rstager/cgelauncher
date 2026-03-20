@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import type { MachineConfig, ConfigPreset, UserPreferences, AuthStatus } from './lib/types.ts';
-import { startVm, stopVm, saveDiskConfig, saveCustomPreset, deleteCustomPreset, checkAuth } from './lib/tauri.ts';
+import type { MachineConfig, ConfigPreset, UserPreferences, AuthStatus, DiskType } from './lib/types.ts';
+import { startVm, stopVm, saveDiskConfig, saveCustomPreset, deleteCustomPreset, checkAuth, createDisk, deleteDisk } from './lib/tauri.ts';
 import { useDisks } from './hooks/useDisks.ts';
 import { useVmStatus } from './hooks/useVmStatus.ts';
 import { usePricing } from './hooks/usePricing.ts';
@@ -126,15 +126,7 @@ export default function App() {
     });
     try {
       await stopVm(vmName);
-      upsertStatus({
-        diskName: selectedDisk,
-        instanceName: vmName,
-        status: 'Stopped',
-        machineType: null,
-        gpuType: null,
-        gpuCount: null,
-        memoryGb: null,
-      });
+      // Stay as Stopping — the monitor will emit NotFound once the instance is confirmed gone.
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setActionError(`Failed to stop VM: ${message}`);
@@ -186,6 +178,22 @@ export default function App() {
     }
   }, []);
 
+  const handleCreateDisk = useCallback(async (name: string, sizeGb: number, diskType: DiskType, sourceImage?: string) => {
+    await createDisk(name, sizeGb, diskType, sourceImage);
+    void refreshDisks();
+  }, [refreshDisks]);
+
+  const handleDeleteDisk = useCallback(async (name: string) => {
+    try {
+      await deleteDisk(name);
+      if (selectedDisk === name) setSelectedDisk(null);
+      void refreshDisks();
+    } catch (err) {
+      console.error('Failed to delete disk:', err);
+      setActionError(`Failed to delete disk: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [selectedDisk, refreshDisks]);
+
   const handleSavePreferences = useCallback(
     (prefs: UserPreferences) => {
       void savePreferences(prefs);
@@ -216,6 +224,8 @@ export default function App() {
       onSavePreferences={handleSavePreferences}
       onSavePreset={(preset: ConfigPreset) => void handleSavePreset(preset)}
       onDeletePreset={(name: string) => void handleDeletePreset(name)}
+      onCreateDisk={handleCreateDisk}
+      onDeleteDisk={(name: string) => void handleDeleteDisk(name)}
     />
   );
 }

@@ -41,8 +41,9 @@ pub fn spawn_monitor(
                             let ssh_instance = instance_name.clone();
                             let ssh_zone = zone.clone();
                             let ssh_project = project.clone();
+                            let external_ip = desc.external_ip.clone();
                             tokio::spawn(async move {
-                                if let Err(e) = ssh::configure_ssh(&*ssh_runner, &ssh_instance, &ssh_zone, &ssh_project).await {
+                                if let Err(e) = ssh::configure_ssh(&*ssh_runner, &ssh_instance, &ssh_zone, &ssh_project, external_ip).await {
                                     eprintln!("config-ssh failed: {e}");
                                 }
                             });
@@ -56,6 +57,7 @@ pub fn spawn_monitor(
                             gpu_type: desc.gpu_type,
                             gpu_count: desc.gpu_count,
                             memory_gb: desc.memory_gb,
+                            external_ip: desc.external_ip.clone(),
                         };
 
                         // Best-effort emit; ignore errors if frontend is not listening

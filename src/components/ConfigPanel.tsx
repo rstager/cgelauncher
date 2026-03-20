@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
 import type { Disk, MachineConfig as MachineConfigType, ConfigPreset, VmStatusUpdate, PricingEstimate } from '../lib/types.ts';
 import ResourceSummary from './ResourceSummary.tsx';
 import VmControls from './VmControls.tsx';
 import MachineConfig from './MachineConfig.tsx';
 import PricingDisplay from './PricingDisplay.tsx';
+import { usePricing } from '../hooks/usePricing.ts';
 
 interface ConfigPanelProps {
   disk: Disk;
@@ -37,23 +37,39 @@ export default function ConfigPanel({
   const effectiveStatus = vmStatus?.status ?? (disk.attachedTo ? 'Running' : 'Stopped');
   const vmName = disk.name;
   const isRunning = effectiveStatus === 'Running';
+  const diskReady = disk.status === 'READY';
 
-  const spotCostPerHour = useMemo(() => {
-    return pricing?.spotHourly ?? null;
-  }, [pricing]);
+  // When running, price based on the actual VM config, not the next-launch config.
+  const runningConfig: MachineConfigType = {
+    machineType: vmStatus?.machineType ?? config.machineType,
+    gpuType: vmStatus?.gpuType ?? config.gpuType,
+    gpuCount: vmStatus?.gpuCount ?? config.gpuCount,
+    spot: config.spot,
+  };
+  const { pricing: runningPricing } = usePricing(isRunning ? runningConfig : config);
+  const activePricing = isRunning ? runningPricing : pricing;
 
   return (
     <div className="flex-1 p-6 overflow-y-auto">
       <h2 className="text-lg font-semibold mb-1">{disk.name}</h2>
       <div className="text-[13px] text-[var(--color-text-muted)] mb-5">
         VM: {vmName} &middot; {effectiveStatus}
+        {!diskReady && (
+          <span className="ml-2 text-[var(--color-accent-yellow,#e5a50a)] italic">
+            (disk {disk.status.toLowerCase()})
+          </span>
+        )}
       </div>
 
       {isRunning && vmStatus && (
-        <ResourceSummary vmStatus={vmStatus} costPerHour={spotCostPerHour} />
+        <ResourceSummary
+          vmStatus={vmStatus}
+          costPerHour={config.spot ? (activePricing?.spotHourly ?? null) : (activePricing?.ondemandHourly ?? null)}
+          spot={config.spot}
+        />
       )}
 
-      <VmControls vmStatus={effectiveStatus} onStart={onStart} onStop={onStop} />
+      <VmControls vmStatus={effectiveStatus} diskReady={diskReady} instanceName={vmStatus?.instanceName ?? (disk.attachedTo ?? null)} onStart={onStart} onStop={onStop} />
 
       <hr className="border-none border-t border-[var(--color-border-default)] mb-6" style={{ borderTop: '1px solid var(--color-border-default)' }} />
 

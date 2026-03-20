@@ -11,6 +11,7 @@ pub struct InstanceDescription {
     pub gpu_type: Option<String>,
     pub gpu_count: Option<u32>,
     pub memory_gb: Option<f64>,
+    pub external_ip: Option<String>,
 }
 
 pub async fn create_instance(
@@ -145,6 +146,7 @@ pub async fn describe_instance(
                 gpu_type: None,
                 gpu_count: None,
                 memory_gb: None,
+                external_ip: None,
             })
         }
         Err(e) => Err(e),
@@ -186,12 +188,22 @@ fn parse_instance_description(json: &str) -> Result<InstanceDescription, GcloudE
         .as_deref()
         .and_then(memory_from_machine_type);
 
+    // External IP is in networkInterfaces[0].accessConfigs[0].natIP
+    let external_ip = v["networkInterfaces"]
+        .as_array()
+        .and_then(|ifaces| ifaces.first())
+        .and_then(|iface| iface["accessConfigs"].as_array())
+        .and_then(|acs| acs.first())
+        .and_then(|ac| ac["natIP"].as_str())
+        .map(String::from);
+
     Ok(InstanceDescription {
         status,
         machine_type,
         gpu_type,
         gpu_count,
         memory_gb,
+        external_ip,
     })
 }
 
@@ -321,6 +333,36 @@ mod tests {
         assert_eq!(desc.gpu_type.as_deref(), Some("nvidia-tesla-t4"));
         assert_eq!(desc.gpu_count, Some(4));
         assert_eq!(desc.memory_gb, Some(30.0));
+    }
+
+    #[tokio::test]
+    async fn describe_instance_parses_external_ip() {
+        let json = r#"{
+            "status": "RUNNING",
+            "machineType": "zones/us-central1-a/machineTypes/n1-standard-4",
+            "networkInterfaces": [{
+                "accessConfigs": [{"type": "ONE_TO_ONE_NAT", "natIP": "34.56.78.90"}]
+            }]
+        }"#;
+        let mut runner = FakeRunner::new();
+        runner.on_success("compute instances describe", json);
+
+        let desc = describe_instance(&runner, "us-central1-a", "my-vm")
+            .await
+            .unwrap();
+        assert_eq!(desc.external_ip.as_deref(), Some("34.56.78.90"));
+    }
+
+    #[tokio::test]
+    async fn describe_instance_no_external_ip() {
+        let json = r#"{"status": "RUNNING", "machineType": "zones/us-central1-a/machineTypes/n1-standard-4"}"#;
+        let mut runner = FakeRunner::new();
+        runner.on_success("compute instances describe", json);
+
+        let desc = describe_instance(&runner, "us-central1-a", "my-vm")
+            .await
+            .unwrap();
+        assert!(desc.external_ip.is_none());
     }
 
     #[tokio::test]

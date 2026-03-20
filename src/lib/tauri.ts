@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type {
   Disk,
   DiskConfig,
+  ImageInfo,
   MachineConfig,
   ConfigPreset,
   PricingEstimate,
@@ -31,6 +32,18 @@ export async function listDisks(): Promise<Disk[]> {
   return tauriInvoke<Disk[]>('list_disks');
 }
 
+export async function createDisk(diskName: string, sizeGb: number, diskType: string, sourceImage?: string): Promise<void> {
+  return tauriInvoke<void>('create_disk', { diskName, sizeGb, diskType, sourceImage: sourceImage ?? null });
+}
+
+export async function listImages(imageProject: string, filter?: string): Promise<ImageInfo[]> {
+  return tauriInvoke<ImageInfo[]>('list_images', { imageProject, filter: filter ?? null });
+}
+
+export async function deleteDisk(diskName: string): Promise<void> {
+  return tauriInvoke<void>('delete_disk', { diskName });
+}
+
 export async function startVm(diskName: string, config: MachineConfig): Promise<VmStatusUpdate> {
   return tauriInvoke<VmStatusUpdate>('start_vm', { diskName, config });
 }
@@ -47,8 +60,12 @@ export async function checkAuth(): Promise<AuthStatus> {
   return tauriInvoke<AuthStatus>('check_auth');
 }
 
-export async function configureSsh(): Promise<{ sshHost: string; configPath: string }> {
-  return tauriInvoke<{ sshHost: string; configPath: string }>('configure_ssh');
+export async function configureSsh(instanceName: string): Promise<{ sshHost: string; configPath: string }> {
+  return tauriInvoke<{ sshHost: string; configPath: string }>('configure_ssh', { instanceName });
+}
+
+export async function launchSshTerminal(instanceName: string): Promise<void> {
+  return tauriInvoke<void>('launch_ssh_terminal', { instanceName });
 }
 
 export async function getPreferences(): Promise<UserPreferences> {

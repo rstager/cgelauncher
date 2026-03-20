@@ -2,6 +2,14 @@ export type DiskStatus = 'READY' | 'CREATING' | 'RESTORING' | 'FAILED' | 'DELETI
 
 export type DiskType = 'pd-standard' | 'pd-ssd' | 'pd-balanced';
 
+export interface ImageInfo {
+  name: string;
+  family: string | null;
+  description: string | null;
+  diskSizeGb: string | null;
+  selfLink: string;
+}
+
 export interface Disk {
   name: string;
   sizeGb: number;
@@ -75,6 +83,7 @@ export interface VmStatusUpdate {
   gpuType: string | null;
   gpuCount: number | null;
   memoryGb: number | null;
+  externalIp: string | null;
 }
 
 export interface GcloudError {

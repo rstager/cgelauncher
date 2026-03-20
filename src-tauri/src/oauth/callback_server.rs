@@ -13,7 +13,9 @@ const ERROR_HTML: &str = r#"<!DOCTYPE html><html><body style="font-family:sans-s
 /// Binds the callback port immediately and returns a listener ready to accept.
 /// Callers should bind first, then open the browser, then call [`accept_callback`].
 pub async fn bind_callback_listener() -> Result<TcpListener, String> {
-    TcpListener::bind("127.0.0.1:7887")
+    // Bind to all interfaces so the Windows browser can reach this listener
+    // when running under WSL (Windows localhost != WSL localhost).
+    TcpListener::bind("0.0.0.0:7887")
         .await
         .map_err(|e| format!("Failed to bind callback port 7887: {e}"))
 }

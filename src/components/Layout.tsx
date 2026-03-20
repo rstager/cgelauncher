@@ -1,6 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import type {
   Disk,
+  DiskType,
   MachineConfig,
   ConfigPreset,
   VmStatusUpdate,
@@ -14,6 +15,7 @@ import DiskList from './DiskList.tsx';
 import ConfigPanel from './ConfigPanel.tsx';
 import StatusBar from './StatusBar.tsx';
 import SettingsPanel from './SettingsPanel.tsx';
+import CreateDiskPanel from './CreateDiskPanel.tsx';
 
 interface LayoutProps {
   disks: Disk[];
@@ -37,6 +39,8 @@ interface LayoutProps {
   onSavePreset: (preset: ConfigPreset) => void;
   onDeletePreset: (name: string) => void;
   onAuthChange: () => void;
+  onCreateDisk: (name: string, sizeGb: number, diskType: DiskType, sourceImage?: string) => Promise<void>;
+  onDeleteDisk: (name: string) => void;
 }
 
 export default function Layout({
@@ -61,8 +65,11 @@ export default function Layout({
   onSavePreset,
   onDeletePreset,
   onAuthChange,
+  onCreateDisk,
+  onDeleteDisk,
 }: LayoutProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [createDiskOpen, setCreateDiskOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsError, setLogsError] = useState<string | null>(null);
@@ -77,9 +84,6 @@ export default function Layout({
 
   const selectedDiskData = disks.find((d) => d.name === selectedDisk);
   const selectedVmStatus = selectedDisk ? vmStatuses.get(selectedDisk) : undefined;
-  const isSelectedRunning =
-    selectedVmStatus?.status === 'Running' ||
-    (!selectedVmStatus && selectedDiskData?.attachedTo != null);
 
   const loadLogs = async (initial = false) => {
     if (initial) setLogsLoading(true);
@@ -186,6 +190,8 @@ export default function Layout({
           loading={disksLoading}
           onSelectDisk={onSelectDisk}
           onRefresh={onRefreshDisks}
+          onCreateDisk={() => setCreateDiskOpen(true)}
+          onDeleteDisk={onDeleteDisk}
         />
         )}
         {!needsAuth && (selectedDiskData ? (
@@ -221,7 +227,7 @@ export default function Layout({
         diskName={selectedDisk}
         project={preferences.project}
         zone={preferences.zone}
-        isRunning={isSelectedRunning}
+        vmStatus={selectedVmStatus}
       />
 
       {/* Settings Modal */}
@@ -230,6 +236,16 @@ export default function Layout({
           preferences={preferences}
           onSave={onSavePreferences}
           onClose={() => { setSettingsOpen(false); onAuthChange(); }}
+        />
+      )}
+
+      {createDiskOpen && (
+        <CreateDiskPanel
+          onCreate={async (name, sizeGb, diskType, sourceImage) => {
+            await onCreateDisk(name, sizeGb, diskType, sourceImage);
+            setCreateDiskOpen(false);
+          }}
+          onClose={() => setCreateDiskOpen(false)}
         />
       )}
 
